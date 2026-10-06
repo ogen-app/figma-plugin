@@ -16,6 +16,9 @@ const MESSAGES: Record<string, string> = {
   service_unavailable: 'Ogen is temporarily unavailable. Try again shortly.',
   internal_error: 'Something went wrong in Ogen. Try again.',
   network_error: 'Could not reach Ogen. Check your connection.',
+  // A failed PUT to a presigned storage URL: the API may be fine while
+  // storage is unreachable or refuses the request (e.g. a CORS preflight).
+  storage_network_error: 'Could not reach Ogen storage. Check your connection.',
   plugin_token_invalid: 'Disconnected from Ogen.',
   post_not_found: 'The post no longer exists in this workspace.',
   post_locked: "The post was already sent for publishing and can't take new images.",

@@ -93,7 +93,7 @@ export function createApiClient(opts: ApiClientOptions) {
       res = await doFetch(url, { method: 'PUT', headers: { 'Content-Type': body.type }, body, signal })
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') throw err
-      throw new ApiError(0, 'network_error', 'Could not reach Ogen storage. Check your connection.')
+      throw new ApiError(0, 'storage_network_error', 'Could not reach Ogen storage. Check your connection.')
     }
     // A storage 4xx (expired URL, bad signature) is not an Ogen auth or plan
     // answer: report it as a plain 400 so the queue doesn't disconnect or
