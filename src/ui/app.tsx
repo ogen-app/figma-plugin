@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { createApiClient, isApiError } from '../api/client'
 import type { Me } from '../api/types'
+import type { SendRequest } from '../queue/types'
 import type { Bridge } from './bridge'
 import { ConnectScreen } from './screens/Connect'
 import { SendScreen } from './screens/Send'
@@ -73,12 +74,33 @@ export function App({ bridge }: { bridge: Bridge }) {
     setView((v) => (v.name === 'send' && v.session.token === session.token ? { ...v, me } : v))
   }
 
+  async function disconnect() {
+    // Best effort: a failed revoke still disconnects this install; the
+    // connection stays listed in Ogen settings, where it can be revoked.
+    await services.api.revokeToken().catch(() => undefined)
+    await services.disconnect()
+  }
+
+  function send(_request: SendRequest) {
+    bridge.send({ type: 'notify', message: 'Sending is not wired up yet.' })
+  }
+
   switch (view.name) {
     case 'loading':
       return <main class="screen center muted">Loading…</main>
     case 'connect':
       return <ConnectScreen notice={view.notice} doc={doc} api={services.api} onConnected={connected} />
     case 'send':
-      return <SendScreen session={view.session} me={view.me} />
+      return (
+        <SendScreen
+          bridge={bridge}
+          api={services.api}
+          store={services.store}
+          session={view.session}
+          me={view.me}
+          onDisconnect={disconnect}
+          onSend={send}
+        />
+      )
   }
 }

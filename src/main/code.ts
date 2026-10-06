@@ -1,4 +1,20 @@
-import { isStorageKey, type MainToUi, type RpcMethod, type RpcMethods, type UiToMain } from '../shared/messages'
+import {
+  EXPORTABLE_TYPES,
+  isStorageKey,
+  type ExportableType,
+  type MainToUi,
+  type RpcMethod,
+  type RpcMethods,
+  type SelectionItem,
+  type UiToMain,
+} from '../shared/messages'
+
+const THUMBNAIL_PX = 96
+// Thumbnails are a convenience; past this many the list shows placeholders.
+const MAX_THUMBNAILS = 30
+const SELECTION_DEBOUNCE_MS = 150
+
+type ExportableNode = SceneNode & ExportMixin & DimensionAndPositionMixin & { type: ExportableType }
 
 figma.showUI(__html__, { width: 360, height: 540, themeColors: true })
 
@@ -29,6 +45,9 @@ figma.ui.onmessage = (msg: UiToMain) => {
     case 'ready':
       post({ type: 'init', userName: figma.currentUser?.name ?? null, fileName: figma.root.name })
       break
+    case 'request-selection':
+      publishSelection()
+      break
     case 'rpc':
       void runRpc(msg.id, msg.method, msg.params)
       break
@@ -36,6 +55,51 @@ figma.ui.onmessage = (msg: UiToMain) => {
       figma.notify(msg.message, { error: msg.error })
       break
   }
+}
+
+let selectionTimer: number | undefined
+const scheduleSelection = () => {
+  if (selectionTimer !== undefined) clearTimeout(selectionTimer)
+  selectionTimer = setTimeout(publishSelection, SELECTION_DEBOUNCE_MS)
+}
+figma.on('selectionchange', scheduleSelection)
+figma.on('currentpagechange', scheduleSelection)
+
+// selectionGen invalidates thumbnail renders for a superseded selection.
+let selectionGen = 0
+
+function publishSelection() {
+  const gen = ++selectionGen
+  const selection = figma.currentPage.selection
+  const nodes = selection.filter(isExportable)
+  const items: SelectionItem[] = nodes.map((n) => ({
+    id: n.id,
+    name: n.name,
+    type: n.type,
+    width: n.width,
+    height: n.height,
+  }))
+  post({ type: 'selection', items, skipped: selection.length - nodes.length })
+  void renderThumbnails(nodes.slice(0, MAX_THUMBNAILS), gen)
+}
+
+async function renderThumbnails(nodes: ExportableNode[], gen: number) {
+  for (const node of nodes) {
+    if (gen !== selectionGen) return
+    try {
+      const bytes = await node.exportAsync({
+        format: 'PNG',
+        constraint: { type: node.width >= node.height ? 'WIDTH' : 'HEIGHT', value: THUMBNAIL_PX },
+      })
+      if (gen === selectionGen) post({ type: 'thumbnail', id: node.id, bytes })
+    } catch {
+      // Empty groups and zero-size nodes cannot render; the list shows a placeholder.
+    }
+  }
+}
+
+function isExportable(node: SceneNode): node is ExportableNode {
+  return (EXPORTABLE_TYPES as readonly string[]).includes(node.type) && 'exportAsync' in node
 }
 
 async function runRpc(id: number, method: RpcMethod, params: unknown) {
