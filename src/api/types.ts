@@ -67,6 +67,20 @@ export function toUser(v: unknown): User {
   return user
 }
 
+// StoredSession is what pairing yields; the plugin keeps it in clientStorage.
+export interface StoredSession {
+  token: string
+  workspace: Workspace
+  user: User
+}
+
+export function parseSession(v: unknown): StoredSession | null {
+  const o = rec(v)
+  const token = str(o.token)
+  if (!token.startsWith('ogp_')) return null
+  return { token, workspace: toWorkspace(o.workspace), user: toUser(o.user) }
+}
+
 export function toMe(v: unknown): Me {
   const o = rec(v)
   const conn = rec(o.connection)
