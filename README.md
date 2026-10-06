@@ -32,8 +32,19 @@ npm run dev        # dev build in watch mode, API at http://localhost:9001
    print an `[ogen] editorType=… file=… user=…` line on start (see
    [docs/spikes.md](docs/spikes.md)).
 
-Pairing opens the approval page from the API's `APP_BASE_URL`, so the local
-Ogen UI must be running and signed in to approve.
+`npm run dev` only rebuilds `dist/` on changes. It does not start a web
+server, so there is no page to open in a browser: the plugin runs inside
+Figma.
+
+Pairing opens the approval page at the API's `APP_BASE_URL`, which defaults
+to production (`https://app.getogen.com`). To approve against your local
+stack, set it in `ogen/.env` and run the Ogen UI (the approval page is
+`/integrations/figma/connect`, CON-339):
+
+```sh
+# ogen/.env
+APP_BASE_URL=http://localhost:9002
+```
 
 To use a different API (for example staging), set `OGEN_API_URL`:
 
