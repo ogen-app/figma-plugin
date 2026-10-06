@@ -69,7 +69,17 @@ console.log(`[build] mode=${mode} api=${apiBase}`)
 if (args.watch) {
   const contexts = await Promise.all([esbuild.context(mainOptions), esbuild.context(uiOptions)])
   await Promise.all(contexts.map((ctx) => ctx.watch()))
-  console.log('[build] watching for changes…')
+  console.log(
+    [
+      '[build] watching for changes…',
+      '',
+      '  There is no web page to open: the plugin runs inside Figma desktop.',
+      '  1. Figma desktop → Plugins → Development → Import plugin from manifest… → manifest.json',
+      '  2. Plugins → Development → Ogen (re-run it to pick up a rebuild)',
+      `  3. The plugin calls the Ogen API at ${apiBase}; start it there first.`,
+      '',
+    ].join('\n'),
+  )
 } else {
   await Promise.all([esbuild.build(mainOptions), esbuild.build(uiOptions)])
 }
