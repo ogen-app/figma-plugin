@@ -56,7 +56,8 @@ reviews:
     - path: "manifest.json"
       instructions: |
         networkAccess.allowedDomains must list only the production API origin;
-        localhost belongs in devAllowedDomains. Flag any wildcard domain or a
+        localhost and non-production environments (api.dev.getogen.com)
+        belong in devAllowedDomains. Flag any wildcard domain or a
         reasoning field that does not match the domains listed.
 
     - path: "src/**/*.{ts,tsx}"

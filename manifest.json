@@ -4,11 +4,20 @@
   "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "dist/ui.html",
-  "editorType": ["figma"],
+  "editorType": [
+    "figma"
+  ],
   "documentAccess": "dynamic-page",
-  "permissions": ["currentuser"],
+  "permissions": [
+    "currentuser"
+  ],
   "networkAccess": {
-    "allowedDomains": ["https://api.getogen.com"],
-    "devAllowedDomains": ["http://localhost:9001"]
+    "allowedDomains": [
+      "https://api.getogen.com"
+    ],
+    "devAllowedDomains": [
+      "http://localhost:9001",
+      "https://api.dev.getogen.com"
+    ]
   }
 }

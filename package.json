@@ -9,7 +9,9 @@
   },
   "scripts": {
     "dev": "node scripts/build.mjs --mode dev --watch",
+    "dev:remote": "OGEN_API_URL=https://api.dev.getogen.com node scripts/build.mjs --mode dev --watch",
     "build:dev": "node scripts/build.mjs --mode dev",
+    "build:dev:remote": "OGEN_API_URL=https://api.dev.getogen.com node scripts/build.mjs --mode dev",
     "build:prod": "node scripts/build.mjs --mode prod",
     "build": "npm run build:prod",
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.main.json && tsc -p tsconfig.test.json",
