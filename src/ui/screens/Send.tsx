@@ -10,7 +10,7 @@ import { PostPicker } from '../components/PostPicker'
 import { Segmented } from '../components/Segmented'
 import { SelectionList } from '../components/SelectionList'
 import { useSelection } from '../hooks/useSelection'
-import { pixelWarning } from '../preflight'
+import { pixelWarning } from '../../queue/preflight'
 import { DEFAULT_PREFS, type Prefs, type Store, type StoredSession } from '../storage'
 
 const FORMATS = [

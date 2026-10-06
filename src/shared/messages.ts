@@ -29,7 +29,15 @@ export function isStorageKey(key: unknown): key is StorageKey {
   return Object.values(STORAGE_KEYS).includes(key as StorageKey)
 }
 
+export interface ExportedImage {
+  bytes: Uint8Array
+  nodeId: string
+  nodeName: string
+  fileName: string
+}
+
 export interface RpcMethods {
+  exportNode: { params: { nodeId: string; format: ExportFormat; scale: Scale }; result: ExportedImage }
   storageGet: { params: { key: StorageKey }; result: unknown }
   storageSet: { params: { key: StorageKey; value: unknown }; result: null }
   storageDelete: { params: { key: StorageKey }; result: null }

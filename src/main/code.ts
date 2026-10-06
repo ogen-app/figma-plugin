@@ -29,6 +29,16 @@ type Handlers = {
 }
 
 const handlers: Handlers = {
+  // One node per call: the UI uploads each export before asking for the next,
+  // so only one full-size image is in memory at a time.
+  exportNode: async ({ nodeId, format, scale }) => {
+    if (format !== 'PNG' && format !== 'JPG') throw new Error(`unsupported format ${String(format)}`)
+    if (scale !== 1 && scale !== 2 && scale !== 3) throw new Error(`unsupported scale ${String(scale)}`)
+    const node = await figma.getNodeByIdAsync(nodeId)
+    if (!node || node.removed || !('exportAsync' in node)) throw new Error('The layer no longer exists.')
+    const bytes = await node.exportAsync({ format, constraint: { type: 'SCALE', value: scale } })
+    return { bytes, nodeId, nodeName: node.name, fileName: figma.root.name }
+  },
   storageGet: ({ key }) => figma.clientStorage.getAsync(checkKey(key)),
   storageSet: async ({ key, value }) => {
     await figma.clientStorage.setAsync(checkKey(key), value)

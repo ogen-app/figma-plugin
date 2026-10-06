@@ -388,3 +388,25 @@ button.wide {
   width: 100%;
   padding: 8px 12px;
 }
+
+.success {
+  color: var(--success);
+}
+
+.danger {
+  color: var(--danger);
+}
+
+.status-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.status-icon.muted {
+  color: var(--text-secondary);
+}
