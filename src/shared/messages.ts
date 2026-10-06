@@ -5,6 +5,19 @@
 export type ExportFormat = 'PNG' | 'JPG'
 export type Scale = 1 | 2 | 3
 
+// Node types the plugin offers to send: top-level containers a designer
+// thinks of as "a frame".
+export const EXPORTABLE_TYPES = ['FRAME', 'COMPONENT', 'COMPONENT_SET', 'INSTANCE', 'GROUP', 'SECTION'] as const
+export type ExportableType = (typeof EXPORTABLE_TYPES)[number]
+
+export interface SelectionItem {
+  id: string
+  name: string
+  type: ExportableType
+  width: number
+  height: number
+}
+
 // clientStorage keys. Main refuses any other key.
 export const STORAGE_KEYS = {
   session: 'ogen',
@@ -25,10 +38,14 @@ export type RpcMethod = keyof RpcMethods
 
 export type UiToMain =
   | { type: 'ready' }
+  | { type: 'request-selection' }
   | { type: 'rpc'; id: number; method: RpcMethod; params: unknown }
   | { type: 'notify'; message: string; error?: boolean }
 
 export type MainToUi =
   | { type: 'init'; userName: string | null; fileName: string }
+  // skipped counts selected layers that are not exportable types.
+  | { type: 'selection'; items: SelectionItem[]; skipped: number }
+  | { type: 'thumbnail'; id: string; bytes: Uint8Array }
   | { type: 'rpc-result'; id: number; ok: true; value: unknown }
   | { type: 'rpc-result'; id: number; ok: false; error: string }
