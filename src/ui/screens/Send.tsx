@@ -87,7 +87,10 @@ export function SendScreen({ bridge, api, store, session, me, onDisconnect, onSe
   const oversized = video ? 0 : items.filter((i) => pixelWarning(i, prefs.scale, limits)).length
   const notAnimated = video ? items.length - animatedCount : 0
   const sendable = items.length - oversized - notAnimated
-  const blocked = sendable === 0 || (sendTo === 'post' && !post)
+  // A post picked in image mode may not take video; keep it picked so
+  // switching back to images still works, but don't send video to it.
+  const postRefusesVideo = video && post?.video === null
+  const blocked = sendable === 0 || (sendTo === 'post' && !post) || postRefusesVideo
 
   function send() {
     onSend({
@@ -171,6 +174,7 @@ export function SendScreen({ bridge, api, store, session, me, onDisconnect, onSe
             won't be sent.
           </p>
         )}
+        {postRefusesVideo && <p class="warning small">This post can't take a video. Pick another post.</p>}
         <button class="primary wide" disabled={blocked} onClick={send}>
           {sendButtonLabel(sendable, sendTo === 'post', video)}
         </button>
