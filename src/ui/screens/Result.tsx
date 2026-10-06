@@ -14,7 +14,11 @@ export interface ResultScreenProps {
 export function ResultScreen({ request, statuses, outcome, onBack }: ResultScreenProps) {
   const summary = summarize(statuses)
   const openUrl = summary.openUrl && isHttpUrl(summary.openUrl) ? summary.openUrl : null
-  const where = request.destination.kind === 'post' ? `to “${request.destination.post.title || 'Untitled post'}”` : 'to the content bank'
+  const dest = request.destination
+  const where =
+    dest.kind === 'post'
+      ? `to “${dest.post.title || 'Untitled post'}”${dest.post.campaignName ? ` in ${dest.post.campaignName}` : ''}`
+      : 'to the content bank'
 
   return (
     <main class="screen send">

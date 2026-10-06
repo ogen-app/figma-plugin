@@ -49,6 +49,7 @@ export type UiToMain =
   | { type: 'request-selection' }
   | { type: 'rpc'; id: number; method: RpcMethod; params: unknown }
   | { type: 'notify'; message: string; error?: boolean }
+  | { type: 'resize'; height: number }
 
 export type MainToUi =
   | { type: 'init'; userName: string | null; fileName: string }

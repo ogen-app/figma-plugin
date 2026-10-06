@@ -1,7 +1,7 @@
 # Ogen Figma plugin
 
 "Send to Ogen": select frames in Figma and send them to an Ogen workspace's
-content bank, optionally attaching them to a draft post in the same step.
+content bank, optionally attaching them to a campaign post in the same step.
 
 The plugin renders frames locally with `node.exportAsync()` and uploads the
 bytes to Ogen's plugin API (`/api/plugins/figma/*`), authenticated by a plugin
@@ -114,7 +114,11 @@ sequenceDiagram
     M-->>U: selection [{id, name, type, w, h}]
     M-->>U: thumbnail {id, bytes} per frame (96px)
 
-    D->>U: Send (format, scale, bank or draft post)
+    opt Send to → Campaigns
+        U->>API: GET /campaigns
+        API-->>U: campaigns → posts (status, platform, scheduled_at, attachable)
+    end
+    D->>U: Send (format, scale, bank or campaign post)
     loop each frame, one at a time
         U->>M: exportNode {nodeId, format, scale}
         M->>M: node.exportAsync({format, SCALE})
@@ -160,6 +164,14 @@ sequenceDiagram
 - **Sending** (`src/queue/sendQueue.ts`): the UI asks main to export one node,
   uploads it, and only then asks for the next. That keeps a single full-size
   export in memory.
+- **Campaign tree** (`src/ui/components/CampaignPicker.tsx`,
+  `src/ui/campaignTree.ts`): "Send to → Campaigns" loads
+  `GET /api/plugins/figma/campaigns` (CON-344) once. It shows campaigns, then
+  posts grouped by publish date in each campaign's timezone, with an
+  "Unscheduled" group last. Each post shows a platform badge and a status
+  pill. Scheduled and published posts are listed but disabled, because they
+  can't take new images. The search box filters campaign names, post titles
+  and platforms. While the tree is open, the window grows to 700px.
 - **Pre-flight** (`src/queue/preflight.ts`): frames over image-service's
   pixel cap at the chosen scale are flagged and skipped. Exports over
   `limits.max_image_bytes` (from `GET /me`) fail before upload.
