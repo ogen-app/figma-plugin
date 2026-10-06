@@ -1,13 +1,8 @@
-import { rec, str, toUser, toWorkspace, type User, type Workspace } from '../api/types'
+import { parseSession, rec, type StoredSession } from '../api/types'
 import { STORAGE_KEYS, type ExportFormat, type Scale } from '../shared/messages'
 import type { Bridge } from './bridge'
 
-// StoredSession is what pairing yields, kept in clientStorage under "ogen".
-export interface StoredSession {
-  token: string
-  workspace: Workspace
-  user: User
-}
+export { parseSession, type StoredSession } from '../api/types'
 
 export interface Prefs {
   format: ExportFormat
@@ -15,13 +10,6 @@ export interface Prefs {
 }
 
 export const DEFAULT_PREFS: Prefs = { format: 'PNG', scale: 2 }
-
-export function parseSession(v: unknown): StoredSession | null {
-  const o = rec(v)
-  const token = str(o.token)
-  if (!token.startsWith('ogp_')) return null
-  return { token, workspace: toWorkspace(o.workspace), user: toUser(o.user) }
-}
 
 export function parsePrefs(v: unknown): Prefs {
   const o = rec(v)
