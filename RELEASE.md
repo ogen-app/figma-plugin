@@ -230,7 +230,7 @@ Keep the copy and artwork in version control, for example under
 | Tagline | Send frames to your Ogen content bank or a draft post in one click |
 | Description | What it does, the one-time Connect step, what gets sent (PNG/JPG at 1–3×, frame name and file name), and that SVG isn't supported |
 | Category | Design tools (or the closest marketing/export category Figma offers) |
-| Icon | 128 × 128 px |
+| Icon | `assets/icon-128.png` (128 × 128, rendered from `assets/icon.svg`). Figma's manifest has no icon field, so the icon only appears once it's uploaded here; development builds show Figma's default icon |
 | Thumbnail | 1920 × 1080 px |
 | Carousel | Up to 9 images or videos: Connect, Send screen, draft-post picker, Result |
 | Support contact | A shared support address or URL, not a personal one |

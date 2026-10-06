@@ -436,3 +436,23 @@ button.wide {
 .banner p {
   margin: 0;
 }
+
+.logo {
+  flex: none;
+  display: block;
+}
+
+.logo-bg {
+  fill: var(--text);
+}
+
+.logo-mark {
+  fill: var(--bg);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
