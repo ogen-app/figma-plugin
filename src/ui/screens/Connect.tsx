@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { isApiError, type ApiClient } from '../../api/client'
 import { clientLabel, startPairing, waitForApproval } from '../../api/pairing'
 import type { DocInfo } from '../app'
+import { Logo } from '../components/Logo'
 import type { StoredSession } from '../storage'
 
 export interface ConnectScreenProps {
@@ -75,6 +76,7 @@ export function ConnectScreen({ notice, doc, api, onConnected }: ConnectScreenPr
   const error = state.kind === 'idle' ? state.error : undefined
   return (
     <main class="screen center">
+      <Logo size={48} />
       <h1>Send frames to Ogen</h1>
       <p class="muted">Connect this plugin to your Ogen workspace once, then send selected frames in one click.</p>
       {notice && !error && <p class="notice">{notice}</p>}

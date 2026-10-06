@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
+import { Logo } from './Logo'
 
 export interface HeaderProps {
   workspaceName: string
@@ -25,9 +26,12 @@ export function Header({ workspaceName, userName, onDisconnect }: HeaderProps) {
 
   return (
     <header class="header">
-      <div class="header-title">
-        <span class="muted">Sending to</span>
-        <strong title={workspaceName}>{workspaceName || 'your workspace'}</strong>
+      <div class="brand">
+        <Logo size={28} />
+        <div class="header-title">
+          <span class="muted">Sending to</span>
+          <strong title={workspaceName}>{workspaceName || 'your workspace'}</strong>
+        </div>
       </div>
       <div class="menu" ref={ref}>
         <button class="icon" aria-label="Connection menu" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
