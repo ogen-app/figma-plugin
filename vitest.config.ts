@@ -5,7 +5,7 @@ export default defineConfig({
     __API_BASE__: JSON.stringify('http://api.test'),
     __DEV__: 'false',
   },
-  esbuild: { jsx: 'automatic', jsxImportSource: 'preact' },
+  oxc: { jsx: { runtime: 'automatic', importSource: 'preact' } },
   test: {
     include: ['test/**/*.test.{ts,tsx}'],
     environment: 'node',

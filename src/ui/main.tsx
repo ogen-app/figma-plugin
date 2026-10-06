@@ -1,13 +1,6 @@
 import { render } from 'preact'
+import { App } from './app'
+import { createBridge } from './bridge'
 import './styles.css'
 
-function App() {
-  return (
-    <main class="screen">
-      <h1>Ogen</h1>
-      <p class="muted">{__API_BASE__}</p>
-    </main>
-  )
-}
-
-render(<App />, document.getElementById('app')!)
+render(<App bridge={createBridge()} />, document.getElementById('app')!)
