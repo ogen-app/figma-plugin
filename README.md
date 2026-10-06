@@ -49,10 +49,11 @@ stack, set it in `ogen/.env` and run the Ogen UI (the approval page is
 APP_BASE_URL=http://localhost:9002
 ```
 
-To use another API, set `OGEN_API_URL` (that's all `dev:remote` does):
+To use another API, pass `--api` (that's all `dev:remote` does) or set
+`OGEN_API_URL`:
 
 ```sh
-OGEN_API_URL=https://api.dev.getogen.com npm run build:dev
+node scripts/build.mjs --mode dev --api https://api.dev.getogen.com
 ```
 
 The origin must be listed in `manifest.json` → `networkAccess`. Figma blocks

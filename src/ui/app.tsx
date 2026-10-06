@@ -84,8 +84,16 @@ export function App({ bridge }: { bridge: Bridge }) {
 
   async function connected(session: StoredSession) {
     services.auth.token = session.token
-    await services.store.saveSession(session)
     setView({ name: 'send', session, me: null })
+    // The pairing is single-collect, so the token can't be fetched again:
+    // keep using it even if it can't be persisted, and say so.
+    await services.store.saveSession(session).catch(() =>
+      bridge.send({
+        type: 'notify',
+        message: "Connected, but the connection couldn't be saved. You may need to connect again next time.",
+        error: true,
+      }),
+    )
     const me = await services.api.me().catch(() => null)
     setView((v) => (v.name === 'send' && v.session.token === session.token ? { ...v, me } : v))
   }

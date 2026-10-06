@@ -2,10 +2,12 @@
 // with the UI bundle and styles inlined (Figma loads the UI as one HTML
 // string, so it cannot fetch sibling files).
 //
-//   node scripts/build.mjs --mode dev|prod [--watch]
+//   node scripts/build.mjs --mode dev|prod [--api <origin>] [--watch]
 //
-// The API origin is fixed per build. OGEN_API_URL overrides the mode default
-// and must be listed in manifest.json networkAccess, which Figma enforces.
+// The API origin is fixed per build: --api, else OGEN_API_URL, else the mode
+// default. It must be listed in manifest.json networkAccess, which Figma
+// enforces. npm scripts pass --api rather than an inline env assignment,
+// which Windows' cmd can't parse.
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { parseArgs } from 'node:util'
 import * as esbuild from 'esbuild'
@@ -18,6 +20,7 @@ const DEFAULT_API = {
 const { values: args } = parseArgs({
   options: {
     mode: { type: 'string', default: 'prod' },
+    api: { type: 'string' },
     watch: { type: 'boolean', default: false },
   },
 })
@@ -26,7 +29,7 @@ const mode = args.mode
 if (!(mode in DEFAULT_API)) {
   fail(`unknown --mode "${mode}", expected dev or prod`)
 }
-const apiBase = (process.env.OGEN_API_URL ?? DEFAULT_API[mode]).replace(/\/+$/, '')
+const apiBase = (args.api ?? process.env.OGEN_API_URL ?? DEFAULT_API[mode]).replace(/\/+$/, '')
 
 const manifest = JSON.parse(await readFile('manifest.json', 'utf8'))
 checkNetworkAccess(manifest, apiBase, mode)
