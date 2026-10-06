@@ -1,3 +1,5 @@
+import { useId } from 'preact/hooks'
+
 export interface SegmentedProps<T extends string | number> {
   label: string
   value: T
@@ -7,12 +9,13 @@ export interface SegmentedProps<T extends string | number> {
 }
 
 export function Segmented<T extends string | number>({ label, value, options, onChange, disabled }: SegmentedProps<T>) {
+  const labelId = useId()
   return (
     <div class="field">
-      <span class="field-label" id={`seg-${label}`}>
+      <span class="field-label" id={labelId}>
         {label}
       </span>
-      <div class="segmented" role="radiogroup" aria-labelledby={`seg-${label}`}>
+      <div class="segmented" role="radiogroup" aria-labelledby={labelId}>
         {options.map((o) => (
           <button
             key={o.value}

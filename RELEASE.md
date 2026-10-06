@@ -201,11 +201,23 @@ good build:
    `v0.2.1 — reverts v0.2.0 (…)`.
 4. Fix forward on `main`, then release as usual.
 
-If the plugin is causing harm (for example, uploading to the wrong place),
-you can **unpublish** it from **Manage plugins** while you fix it. It
-disappears from the Community, and users get no notification. Don't
-**delete** the plugin: deletion can't be undone and loses its installs and
-likes.
+Unpublishing is the last resort, for when the plugin is causing harm (for
+example, uploading to the wrong place) and no good build can go out quickly.
+Know what it does before you use it
+([Figma: manage plugins](https://help.figma.com/hc/en-us/articles/360042293714-Manage-classic-plugins-as-a-developer)):
+
+- Everyone who installed the plugin loses it immediately, with no
+  notification, and the Community listing goes away.
+- The listing details (title, tagline, description and so on) are lost and
+  must be entered again when you republish. Likes and installs are kept.
+- The plugin stays in development on the publisher's account, so it can be
+  published again.
+
+Prefer publishing a known-good build (above): users keep working and the
+listing stays intact. If you do unpublish, do it from **Manage plugins**,
+and keep a copy of the listing copy (see [Community listing](#community-listing))
+so republishing is quick. Never **delete** the plugin: deletion can't be
+undone and also loses its installs and likes.
 
 ## Community listing
 

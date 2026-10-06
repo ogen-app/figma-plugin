@@ -21,6 +21,11 @@ describe('build', () => {
     )
   })
 
+  it('takes the origin from --api', () => {
+    execFileSync('node', ['scripts/build.mjs', '--mode', 'dev', '--api', 'https://api.dev.getogen.com'], { stdio: 'pipe' })
+    expect(readFileSync('dist/ui.html', 'utf8')).toContain('https://api.dev.getogen.com')
+  })
+
   it('refuses an API origin missing from the manifest', () => {
     expect(() =>
       execFileSync('node', ['scripts/build.mjs', '--mode', 'prod'], {
