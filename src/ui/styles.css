@@ -266,6 +266,14 @@ button.icon:hover {
   flex: 1;
 }
 
+.item.dimmed {
+  opacity: 0.55;
+}
+
+.anim-pill {
+  margin-left: 6px;
+}
+
 .item-name {
   overflow: hidden;
   text-overflow: ellipsis;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { createApiClient, isApiError } from '../api/client'
 import { sendImage } from '../api/images'
+import { sendVideo } from '../api/videos'
 import { DEFAULT_LIMITS, type Me } from '../api/types'
 import { runSendQueue, type ItemStatus, type QueueOutcome } from '../queue/sendQueue'
 import { headline, summarize } from '../queue/summary'
@@ -117,6 +118,9 @@ export function App({ bridge }: { bridge: Bridge }) {
       {
         exportNode: (item, format, scale) => bridge.call('exportNode', { nodeId: item.id, format, scale }),
         upload: (input, signal) => sendImage(services.api, input, signal),
+        exportVideo: (item, video) =>
+          bridge.call('exportVideo', { nodeId: item.id, format: video.format, quality: video.quality, scale: video.scale }),
+        uploadVideo: (input, signal) => sendVideo(services.api, input, signal),
         sleep,
         limits: me?.limits ?? DEFAULT_LIMITS,
       },

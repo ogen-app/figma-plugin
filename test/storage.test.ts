@@ -14,7 +14,15 @@ describe('parseSession', () => {
 
 describe('parsePrefs', () => {
   it('keeps valid values and defaults the rest', () => {
-    expect(parsePrefs({ format: 'JPG', scale: 3 })).toEqual({ format: 'JPG', scale: 3 })
+    expect(parsePrefs({ format: 'JPG', scale: 3 })).toEqual({ ...DEFAULT_PREFS, format: 'JPG', scale: 3 })
+    expect(parsePrefs({ video: true, videoFormat: 'WEBM', videoQuality: 'LOW', videoScale: 2 })).toEqual({
+      ...DEFAULT_PREFS,
+      video: true,
+      videoFormat: 'WEBM',
+      videoQuality: 'LOW',
+      videoScale: 2,
+    })
+    expect(parsePrefs({ video: 'yes', videoFormat: 'GIF', videoQuality: 'ULTRA', videoScale: 3 })).toEqual(DEFAULT_PREFS)
     expect(parsePrefs({ format: 'SVG', scale: 4 })).toEqual(DEFAULT_PREFS)
     expect(parsePrefs(undefined)).toEqual(DEFAULT_PREFS)
   })

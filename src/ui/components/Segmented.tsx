@@ -3,7 +3,7 @@ import { useId } from 'preact/hooks'
 export interface SegmentedProps<T extends string | number> {
   label: string
   value: T
-  options: ReadonlyArray<{ value: T; label: string }>
+  options: ReadonlyArray<{ value: T; label: string; disabled?: boolean; title?: string }>
   onChange: (value: T) => void
   disabled?: boolean
 }
@@ -22,7 +22,8 @@ export function Segmented<T extends string | number>({ label, value, options, on
             role="radio"
             aria-checked={o.value === value}
             class={o.value === value ? 'selected' : ''}
-            disabled={disabled}
+            disabled={disabled || o.disabled}
+            title={o.title}
             onClick={() => onChange(o.value)}
           >
             {o.label}

@@ -13,11 +13,13 @@
   ],
   "networkAccess": {
     "allowedDomains": [
-      "https://api.getogen.com"
+      "https://api.getogen.com",
+      "https://*.r2.cloudflarestorage.com"
     ],
     "devAllowedDomains": [
       "http://localhost:9001",
       "https://api.dev.getogen.com"
-    ]
+    ],
+    "reasoning": "Uploads to the Ogen API. Animated frames sent as video upload straight to Ogen's Cloudflare R2 storage through short-lived presigned URLs issued by the Ogen API."
   }
 }

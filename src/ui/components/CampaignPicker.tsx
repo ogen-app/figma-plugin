@@ -9,11 +9,13 @@ export interface CampaignPickerProps {
   api: ApiClient
   selected: PostTarget | null
   onSelect: (post: PostTarget | null) => void
+  // Picking a post for a video: posts that can't take one are disabled.
+  video?: boolean
 }
 
 type Load = { state: 'loading' } | { state: 'error' } | { state: 'ready'; campaigns: Campaign[] }
 
-export function CampaignPicker({ api, selected, onSelect }: CampaignPickerProps) {
+export function CampaignPicker({ api, selected, onSelect, video = false }: CampaignPickerProps) {
   const [load, setLoad] = useState<Load>({ state: 'loading' })
   const [query, setQuery] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -63,7 +65,13 @@ export function CampaignPicker({ api, selected, onSelect }: CampaignPickerProps)
   }
 
   function pick(campaign: Campaign, post: CampaignPost) {
-    onSelect({ id: post.id, title: post.title, campaignName: campaign.name, platformName: post.platform?.name ?? '' })
+    onSelect({
+      id: post.id,
+      title: post.title,
+      campaignName: campaign.name,
+      platformName: post.platform?.name ?? '',
+      ...(post.video !== undefined ? { video: post.video } : {}),
+    })
   }
 
   return (
@@ -103,7 +111,7 @@ export function CampaignPicker({ api, selected, onSelect }: CampaignPickerProps)
                   {campaignStatus(c.status)} · {c.posts.length === 1 ? '1 post' : `${c.posts.length} posts`}
                 </span>
               </button>
-              {open && <CampaignPosts campaign={c} onPick={pick} />}
+              {open && <CampaignPosts campaign={c} onPick={pick} video={video} />}
             </section>
           )
         })}
@@ -112,7 +120,15 @@ export function CampaignPicker({ api, selected, onSelect }: CampaignPickerProps)
   )
 }
 
-function CampaignPosts({ campaign, onPick }: { campaign: Campaign; onPick: (c: Campaign, p: CampaignPost) => void }) {
+function CampaignPosts({
+  campaign,
+  onPick,
+  video,
+}: {
+  campaign: Campaign
+  onPick: (c: Campaign, p: CampaignPost) => void
+  video: boolean
+}) {
   if (campaign.posts.length === 0) return <p class="muted small tree-empty">No posts yet</p>
   return (
     <div class="campaign-posts">
@@ -122,12 +138,19 @@ function CampaignPosts({ campaign, onPick }: { campaign: Campaign; onPick: (c: C
           {group.posts.map((post) => {
             const status = postStatus(post.status)
             const time = postTime(post, campaign.timezone)
+            const noVideo = video && post.video === null
             return (
               <button
                 key={post.id}
                 class="post-row"
-                disabled={!post.attachable}
-                title={post.attachable ? undefined : `${status.label} posts can't take new images`}
+                disabled={!post.attachable || noVideo}
+                title={
+                  !post.attachable
+                    ? `${status.label} posts can't take new ${video ? 'media' : 'images'}`
+                    : noVideo
+                      ? "This post can't take a video"
+                      : undefined
+                }
                 onClick={() => onPick(campaign, post)}
               >
                 <PlatformBadge name={post.platform?.name} />

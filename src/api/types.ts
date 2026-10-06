@@ -23,6 +23,8 @@ export interface Limits {
   max_image_bytes: number
   // Not in the API yet; image-service rejects images above 100 MP.
   max_image_pixels: number
+  // Planned in /me (CON-347); until then the default below.
+  max_video_bytes: number
 }
 
 export interface Me {
@@ -35,6 +37,7 @@ export interface Me {
 export const DEFAULT_LIMITS: Limits = {
   max_image_bytes: 50 * 1024 * 1024,
   max_image_pixels: 100_000_000,
+  max_video_bytes: 200 * 1024 * 1024,
 }
 
 type Json = Record<string, unknown>
@@ -53,6 +56,12 @@ export function num(v: unknown, fallback: number): number {
 
 export function rec(v: unknown): Json {
   return isRecord(v) ? v : {}
+}
+
+// clip cuts s to max characters (code points, not UTF-16 units).
+export function clip(s: string, max: number): string {
+  const chars = Array.from(s)
+  return chars.length > max ? chars.slice(0, max).join('') : s
 }
 
 export function toWorkspace(v: unknown): Workspace {
@@ -92,6 +101,7 @@ export function toMe(v: unknown): Me {
     limits: {
       max_image_bytes: num(limits.max_image_bytes, DEFAULT_LIMITS.max_image_bytes),
       max_image_pixels: num(limits.max_image_pixels, DEFAULT_LIMITS.max_image_pixels),
+      max_video_bytes: num(limits.max_video_bytes, DEFAULT_LIMITS.max_video_bytes),
     },
   }
 }
