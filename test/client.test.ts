@@ -37,6 +37,13 @@ describe('api client', () => {
     expect(onUnauthorized).not.toHaveBeenCalled()
   })
 
+  it('turns a storage fetch failure into a storage_network_error', async () => {
+    const f = fakeFetch(new TypeError('Failed to fetch'))
+    const { api } = client(f)
+    const blob = new Blob([new Uint8Array(1)], { type: 'video/mp4' })
+    await expect(api.putObject('https://bucket.example/k', blob)).rejects.toMatchObject({ status: 0, code: 'storage_network_error' })
+  })
+
   it('reports 401 to onUnauthorized', async () => {
     const f = fakeFetch(json(401, { code: 'plugin_token_invalid', error: 'revoked' }))
     const { api, onUnauthorized } = client(f)

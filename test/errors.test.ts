@@ -6,6 +6,7 @@ describe('errorMessage', () => {
   it('maps known codes', () => {
     expect(errorMessage(new ApiError(415, 'vector_rejected', 'SVG is not supported'))).toBe('SVG is not supported. Send as PNG or JPG.')
     expect(errorMessage(new ApiError(0, 'network_error', 'x'))).toBe('Could not reach Ogen. Check your connection.')
+    expect(errorMessage(new ApiError(0, 'storage_network_error', 'x'))).toBe('Could not reach Ogen storage. Check your connection.')
   })
 
   it('names the exhausted quota', () => {
