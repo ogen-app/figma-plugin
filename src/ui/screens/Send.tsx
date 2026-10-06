@@ -93,7 +93,9 @@ export function SendScreen({ bridge, api, store, session, me, onDisconnect, onSe
       <footer class="footer">
         {oversized > 0 && (
           <p class="warning small">
-            {oversized} of {items.length} {oversized === 1 ? 'frame is' : 'frames are'} too large and will be skipped.
+            {oversized === items.length
+              ? `${items.length === 1 ? 'This frame is' : 'These frames are'} too large to send.`
+              : `${oversized} of ${items.length} frames ${oversized === 1 ? 'is' : 'are'} too large and will be skipped.`}
           </p>
         )}
         <button class="primary wide" disabled={blocked} onClick={send}>
