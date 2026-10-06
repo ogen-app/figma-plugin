@@ -1,0 +1,54 @@
+/* themeColors: true in figma.showUI exposes Figma's --figma-color-* tokens and
+   toggles them with the editor theme; fallbacks cover the browser preview. */
+:root {
+  --bg: var(--figma-color-bg, #fff);
+  --bg-secondary: var(--figma-color-bg-secondary, #f5f5f5);
+  --bg-hover: var(--figma-color-bg-hover, #f0f0f0);
+  --text: var(--figma-color-text, #1e1e1e);
+  --text-secondary: var(--figma-color-text-secondary, #6b6b6b);
+  --border: var(--figma-color-border, #e6e6e6);
+  --brand: var(--figma-color-bg-brand, #0d99ff);
+  --on-brand: var(--figma-color-text-onbrand, #fff);
+  --danger: var(--figma-color-text-danger, #dc3412);
+  --warning: var(--figma-color-text-warning, #b86200);
+  --success: var(--figma-color-text-success, #14ae5c);
+  --radius: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 12px/1.4 Inter, system-ui, -apple-system, sans-serif;
+}
+
+#app {
+  height: 100%;
+}
+
+h1 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 16px;
+  gap: 12px;
+}
+
+.muted {
+  color: var(--text-secondary);
+}
