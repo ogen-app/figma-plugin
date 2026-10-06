@@ -34,4 +34,10 @@ describe('build', () => {
       }),
     ).toThrow(/not in manifest\.json networkAccess/)
   })
+
+  it('lets video uploads reach R2 storage, with a reason for reviewers', () => {
+    const manifest = JSON.parse(readFileSync('manifest.json', 'utf8'))
+    expect(manifest.networkAccess.allowedDomains).toContain('https://*.r2.cloudflarestorage.com')
+    expect(manifest.networkAccess.reasoning).toMatch(/video/)
+  })
 })

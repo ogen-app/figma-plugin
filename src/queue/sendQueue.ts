@@ -1,17 +1,22 @@
 import { isApiError } from '../api/client'
 import type { ImageResult, ImageUpload } from '../api/images'
 import type { Limits } from '../api/types'
-import type { ExportedImage, ExportFormat, Scale, SelectionItem } from '../shared/messages'
-import { bytesWarning } from './preflight'
+import type { VideoResult, VideoUpload } from '../api/videos'
+import type { ExportedImage, ExportedVideo, ExportFormat, Scale, SelectionItem } from '../shared/messages'
+import { bytesWarning, videoBytesWarning } from './preflight'
 import { codeMessage, errorMessage, upgradeHint } from './errors'
-import type { SendRequest } from './types'
+import type { SendRequest, VideoOptions } from './types'
 
 export type ItemStatus =
   | { state: 'queued' }
   | { state: 'exporting' }
+  // Figma is rendering the item's animation to a video.
+  | { state: 'rendering' }
   | { state: 'uploading' }
   | { state: 'waiting'; untilMs: number }
-  | { state: 'sent'; result: ImageResult; attachMessage?: string }
+  // attachMessage: an image reached the bank but not the post.
+  // platformIssues: a video was attached but breaks the platform's rules.
+  | { state: 'sent'; result: ImageResult | VideoResult; attachMessage?: string; platformIssues?: string }
   | { state: 'failed'; code?: string; message: string }
   | { state: 'skipped'; message: string }
 
@@ -25,6 +30,8 @@ export type QueueOutcome =
 export interface QueueDeps {
   exportNode: (item: SelectionItem, format: ExportFormat, scale: Scale) => Promise<ExportedImage>
   upload: (input: ImageUpload, signal: AbortSignal) => Promise<ImageResult>
+  exportVideo: (item: SelectionItem, video: VideoOptions) => Promise<ExportedVideo>
+  uploadVideo: (input: VideoUpload, signal: AbortSignal) => Promise<VideoResult>
   sleep: (ms: number, signal: AbortSignal) => Promise<void>
   now?: () => number
   limits: Limits
@@ -60,27 +67,11 @@ export async function runSendQueue(
       return { kind: 'cancelled' }
     }
 
-    onUpdate(i, { state: 'exporting' })
-    let exported: ExportedImage
-    try {
-      exported = await deps.exportNode(item, request.format, request.scale)
-    } catch (err) {
-      onUpdate(i, { state: 'failed', message: `Figma could not export this layer: ${errorMessage(err)}` })
+    onUpdate(i, { state: request.video ? 'rendering' : 'exporting' })
+    const prepared = await prepare(request, item, deps, postId)
+    if ('failed' in prepared) {
+      onUpdate(i, prepared.failed)
       continue
-    }
-    const tooBig = bytesWarning(exported.bytes.byteLength, deps.limits)
-    if (tooBig) {
-      onUpdate(i, { state: 'failed', code: 'too_large', message: tooBig })
-      continue
-    }
-
-    const input: ImageUpload = {
-      bytes: exported.bytes,
-      format: request.format,
-      nodeId: exported.nodeId,
-      nodeName: exported.nodeName,
-      fileName: exported.fileName,
-      postId,
     }
 
     let retriedTransient = false
@@ -88,11 +79,7 @@ export async function runSendQueue(
     for (;;) {
       onUpdate(i, { state: 'uploading' })
       try {
-        const result = await deps.upload(input, signal)
-        const attachMessage = result.attach_error
-          ? codeMessage(result.attach_error.code, result.attach_error.message || 'Could not attach to the post.')
-          : undefined
-        onUpdate(i, { state: 'sent', result, attachMessage })
+        onUpdate(i, sentStatus(await prepared.upload(signal)))
         break
       } catch (err) {
         if (signal.aborted) {
@@ -138,6 +125,56 @@ export async function runSendQueue(
     }
   }
   return { kind: 'done' }
+}
+
+type Prepared = { upload: (signal: AbortSignal) => Promise<ImageResult | VideoResult> } | { failed: ItemStatus }
+
+// prepare exports one item from Figma and checks its size, returning the
+// upload to run (and retry) for it.
+async function prepare(request: SendRequest, item: SelectionItem, deps: QueueDeps, postId: string | undefined): Promise<Prepared> {
+  const { video } = request
+  if (video) {
+    if (!postId) return { failed: { state: 'failed', message: 'Videos can only be attached to a post.' } }
+    let exported: ExportedVideo
+    try {
+      exported = await deps.exportVideo(item, video)
+    } catch (err) {
+      return { failed: { state: 'failed', message: `Figma could not render this video: ${errorMessage(err)}` } }
+    }
+    const tooBig = videoBytesWarning(exported.bytes.byteLength, deps.limits)
+    if (tooBig) return { failed: { state: 'failed', code: 'too_large', message: tooBig } }
+    const input: VideoUpload = { ...exported, format: video.format, postId }
+    return { upload: (signal) => deps.uploadVideo(input, signal) }
+  }
+
+  let exported: ExportedImage
+  try {
+    exported = await deps.exportNode(item, request.format, request.scale)
+  } catch (err) {
+    return { failed: { state: 'failed', message: `Figma could not export this layer: ${errorMessage(err)}` } }
+  }
+  const tooBig = bytesWarning(exported.bytes.byteLength, deps.limits)
+  if (tooBig) return { failed: { state: 'failed', code: 'too_large', message: tooBig } }
+  const input: ImageUpload = {
+    bytes: exported.bytes,
+    format: request.format,
+    nodeId: exported.nodeId,
+    nodeName: exported.nodeName,
+    fileName: exported.fileName,
+    postId,
+  }
+  return { upload: (signal) => deps.upload(input, signal) }
+}
+
+function sentStatus(result: ImageResult | VideoResult): ItemStatus {
+  if ('kind' in result) {
+    const issues = result.platform_validation.map((v) => v.message).join(' ')
+    return issues ? { state: 'sent', result, platformIssues: issues } : { state: 'sent', result }
+  }
+  const attachMessage = result.attach_error
+    ? codeMessage(result.attach_error.code, result.attach_error.message || 'Could not attach to the post.')
+    : undefined
+  return { state: 'sent', result, attachMessage }
 }
 
 async function pause(deps: QueueDeps, ms: number, signal: AbortSignal): Promise<boolean> {

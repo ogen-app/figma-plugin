@@ -36,11 +36,17 @@ function describe(s: ItemStatus): { icon: string; tone: 'muted' | 'success' | 'w
       return { icon: '○', tone: 'muted', text: 'Waiting' }
     case 'exporting':
       return { icon: '◐', tone: 'muted', text: 'Exporting from Figma…' }
+    case 'rendering':
+      return { icon: '◐', tone: 'muted', text: 'Rendering video in Figma…' }
     case 'uploading':
       return { icon: '◑', tone: 'muted', text: 'Uploading…' }
     case 'waiting':
       return { icon: '◔', tone: 'muted', text: 'Ogen asked us to slow down, retrying shortly…' }
     case 'sent':
+      if ('kind' in s.result) {
+        if (s.platformIssues) return { icon: '!', tone: 'warning', text: `Attached, but: ${s.platformIssues}` }
+        return { icon: '✓', tone: 'success', text: 'Video attached' }
+      }
       if (s.attachMessage) return { icon: '!', tone: 'warning', text: `In the content bank, not attached: ${s.attachMessage}` }
       if (s.result.deduplicated) return { icon: '✓', tone: 'success', text: 'Already in Ogen' }
       return { icon: '✓', tone: 'success', text: s.result.attachment ? 'Sent and attached' : 'Sent' }

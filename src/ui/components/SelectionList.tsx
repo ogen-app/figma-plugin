@@ -1,6 +1,7 @@
+import type { VideoRules } from '../../api/campaigns'
 import type { Limits } from '../../api/types'
-import type { Scale, SelectionItem } from '../../shared/messages'
-import { outputSize, pixelWarning } from '../../queue/preflight'
+import { isVideoExportable, type Scale, type SelectionItem, type VideoScale } from '../../shared/messages'
+import { formatSeconds, outputSize, pixelWarning, videoWarnings } from '../../queue/preflight'
 
 export interface SelectionListProps {
   items: SelectionItem[]
@@ -8,9 +9,12 @@ export interface SelectionListProps {
   thumbnails: Record<string, string>
   scale: Scale
   limits: Limits
+  // Set while sending as video: the video scale and the target post's rules.
+  video: { scale: VideoScale; rules: VideoRules | null | undefined } | null
+  onSelectNode: (nodeId: string) => void
 }
 
-export function SelectionList({ items, skipped, thumbnails, scale, limits }: SelectionListProps) {
+export function SelectionList({ items, skipped, thumbnails, scale, limits, video, onSelectNode }: SelectionListProps) {
   if (items.length === 0) {
     return (
       <div class="empty">
@@ -25,11 +29,17 @@ export function SelectionList({ items, skipped, thumbnails, scale, limits }: Sel
     <div class="selection">
       <ul class="items">
         {items.map((item) => {
-          const size = outputSize(item, scale)
-          const warning = pixelWarning(item, scale, limits)
+          const anim = item.animation
+          const exportable = isVideoExportable(item)
+          const size = outputSize(item, video && exportable ? video.scale : scale)
+          const warnings = video
+            ? exportable
+              ? videoWarnings(item, video.rules)
+              : []
+            : [pixelWarning(item, scale, limits)].filter((w): w is string => w !== null)
           const thumb = thumbnails[item.id]
           return (
-            <li key={item.id} class="item">
+            <li key={item.id} class={video && !exportable ? 'item dimmed' : 'item'}>
               <div class="thumb">{thumb ? <img src={thumb} alt="" /> : null}</div>
               <div class="item-body">
                 <div class="item-name" title={item.name}>
@@ -37,8 +47,25 @@ export function SelectionList({ items, skipped, thumbnails, scale, limits }: Sel
                 </div>
                 <div class="muted">
                   {size.width} × {size.height} px
+                  {anim && exportable && (
+                    <span class="pill info anim-pill" title="Animated with Figma Motion">
+                      ▶ Animated{anim.durationSec > 0 ? ` · ${formatSeconds(anim.durationSec)}` : ''}
+                    </span>
+                  )}
                 </div>
-                {warning && <div class="warning">{warning}</div>}
+                {anim && !exportable && (
+                  <div class="muted small">
+                    Animated inside “{anim.frame.name}”. Video exports the whole frame.{' '}
+                    <button class="link" onClick={() => onSelectNode(anim.frame.id)}>
+                      Use frame
+                    </button>
+                  </div>
+                )}
+                {warnings.map((w) => (
+                  <div key={w} class="warning">
+                    {w}
+                  </div>
+                ))}
               </div>
             </li>
           )

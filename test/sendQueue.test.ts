@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../src/api/client'
 import type { ImageResult } from '../src/api/images'
+import type { VideoResult } from '../src/api/videos'
 import { DEFAULT_LIMITS } from '../src/api/types'
 import { runSendQueue, type ItemStatus, type QueueDeps } from '../src/queue/sendQueue'
 import type { SendRequest } from '../src/queue/types'
@@ -38,6 +39,12 @@ function setup(steps: Step[], over: Partial<QueueDeps> = {}) {
       if (!step) throw new Error('no more steps')
       if (step instanceof Error) throw step
       return step
+    }),
+    exportVideo: vi.fn(async () => {
+      throw new Error('not a video send')
+    }),
+    uploadVideo: vi.fn(async () => {
+      throw new Error('not a video send')
     }),
     sleep: async (ms) => {
       sleeps.push(ms)
@@ -160,5 +167,86 @@ describe('runSendQueue', () => {
     const out = await runSendQueue(request(), t.deps, t.onUpdate, ctrl.signal)
     expect(out.kind).toBe('cancelled')
     expect(t.finals.map((s) => s.state)).toEqual(['sent', 'skipped', 'skipped'])
+  })
+
+  describe('video', () => {
+    const post = { id: 'p1', title: 'Reel', campaignName: 'Q4', platformName: 'Instagram' }
+    const video = { format: 'MP4', quality: 'HIGH', scale: 1 } as const
+    const videoResult = (over: Partial<VideoResult> = {}): VideoResult => ({
+      kind: 'video',
+      attachment: { id: 'att', post_id: 'p1', duration_ms: 6000, width: 1080, height: 1920 },
+      platform_validation: [],
+      open_url: 'https://app.getogen.com/posts/p1',
+      ...over,
+    })
+
+    function videoSetup(steps: Array<VideoResult | ApiError | Error>) {
+      const t = setup([])
+      const sent: Array<{ nodeId: string; postId: string; format: string }> = []
+      t.deps.exportVideo = vi.fn(async (item: SelectionItem) => ({ bytes: new Uint8Array(10), nodeId: item.id, nodeName: item.name, fileName: 'File' }))
+      t.deps.uploadVideo = vi.fn(async (input) => {
+        sent.push({ nodeId: input.nodeId, postId: input.postId, format: input.format })
+        const step = steps.shift()
+        if (!step) throw new Error('no more steps')
+        if (step instanceof Error) throw step
+        return step
+      })
+      return { ...t, sent }
+    }
+
+    it('renders and attaches each item to the post', async () => {
+      const t = videoSetup([videoResult(), videoResult(), videoResult()])
+      const out = await runSendQueue(request({ destination: { kind: 'post', post }, video }), t.deps, t.onUpdate, new AbortController().signal)
+      expect(out).toEqual({ kind: 'done' })
+      expect(t.deps.exportVideo).toHaveBeenCalledWith(items[0], video)
+      expect(t.deps.exportNode).not.toHaveBeenCalled()
+      expect(t.sent).toEqual(items.map((i) => ({ nodeId: i.id, postId: 'p1', format: 'MP4' })))
+      expect(t.history.slice(0, 3)).toEqual([
+        [0, 'rendering'],
+        [0, 'uploading'],
+        [0, 'sent'],
+      ])
+    })
+
+    it('reports platform issues on an attached video', async () => {
+      const issues = [
+        { rule: 'max_duration_seconds', message: 'video is 95s long; platform allows up to 90s' },
+        { rule: 'allowed_aspect_ratios', message: 'aspect ratio 1:1 not allowed' },
+      ]
+      const t = videoSetup([videoResult({ platform_validation: issues }), videoResult(), videoResult()])
+      await runSendQueue(request({ destination: { kind: 'post', post }, video }), t.deps, t.onUpdate, new AbortController().signal)
+      expect(t.finals[0]).toMatchObject({
+        state: 'sent',
+        platformIssues: 'video is 95s long; platform allows up to 90s aspect ratio 1:1 not allowed',
+      })
+      expect(t.finals[1]).not.toHaveProperty('platformIssues')
+    })
+
+    it('fails every item without a post destination', async () => {
+      const t = videoSetup([])
+      await runSendQueue(request({ video }), t.deps, t.onUpdate, new AbortController().signal)
+      expect(t.finals.map((s) => s.state)).toEqual(['failed', 'failed', 'failed'])
+      expect(t.deps.exportVideo).not.toHaveBeenCalled()
+    })
+
+    it('fails a render or an oversized video and continues', async () => {
+      const t = videoSetup([videoResult()])
+      t.deps.limits = { ...DEFAULT_LIMITS, max_video_bytes: 5 }
+      t.deps.exportVideo = vi.fn(async (item: SelectionItem) => {
+        if (item.name === 'A') throw new Error('the frame has no animation Figma can render.')
+        return { bytes: new Uint8Array(item.name === 'B' ? 10 : 1), nodeId: item.id, nodeName: item.name, fileName: 'File' }
+      })
+      await runSendQueue(request({ destination: { kind: 'post', post }, video }), t.deps, t.onUpdate, new AbortController().signal)
+      expect(t.finals[0]).toEqual({ state: 'failed', message: 'Figma could not render this video: the frame has no animation Figma can render.' })
+      expect(t.finals[1]).toMatchObject({ state: 'failed', code: 'too_large' })
+      expect(t.finals[2]).toMatchObject({ state: 'sent' })
+    })
+
+    it('retries a failed storage upload once, like an image upload', async () => {
+      const t = videoSetup([err(503, 'upload_failed'), videoResult(), videoResult(), videoResult()])
+      await runSendQueue(request({ destination: { kind: 'post', post }, video }), t.deps, t.onUpdate, new AbortController().signal)
+      expect(t.finals.map((s) => s.state)).toEqual(['sent', 'sent', 'sent'])
+      expect(t.sent.map((s) => s.nodeId)).toEqual(['1:0', '1:0', '1:1', '1:2'])
+    })
   })
 })

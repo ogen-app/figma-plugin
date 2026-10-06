@@ -16,7 +16,25 @@ describe('api client', () => {
     expect(f.calls[0]!.url).toBe('http://api.test/api/plugins/figma/me')
     expect((f.calls[0]!.init.headers as Record<string, string>).Authorization).toBe('Bearer ogp_t')
     expect(me.workspace.name).toBe('Acme')
-    expect(me.limits).toEqual({ max_image_bytes: 52428800, max_image_pixels: 100_000_000 })
+    expect(me.limits).toEqual({ max_image_bytes: 52428800, max_image_pixels: 100_000_000, max_video_bytes: 200 * 1024 * 1024 })
+  })
+
+  it('uploads to a presigned URL without the Ogen token', async () => {
+    const f = fakeFetch(new Response(null, { status: 200 }))
+    const { api } = client(f)
+    await api.putObject('https://bucket.example/key?sig=1', new Blob([new Uint8Array(3)], { type: 'video/mp4' }))
+    expect(f.calls[0]!.url).toBe('https://bucket.example/key?sig=1')
+    expect(f.calls[0]!.init.method).toBe('PUT')
+    expect(f.calls[0]!.init.headers).toEqual({ 'Content-Type': 'video/mp4' })
+  })
+
+  it('reports a storage 403 as a plain 400 so it never reads as auth or quota', async () => {
+    const f = fakeFetch(new Response('<Error/>', { status: 403 }), new Response(null, { status: 503 }))
+    const { api, onUnauthorized } = client(f)
+    const blob = new Blob([new Uint8Array(1)], { type: 'video/mp4' })
+    await expect(api.putObject('https://bucket.example/k', blob)).rejects.toMatchObject({ status: 400, code: 'upload_failed' })
+    await expect(api.putObject('https://bucket.example/k', blob)).rejects.toMatchObject({ status: 503, code: 'upload_failed' })
+    expect(onUnauthorized).not.toHaveBeenCalled()
   })
 
   it('reports 401 to onUnauthorized', async () => {

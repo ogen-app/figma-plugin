@@ -1,5 +1,5 @@
 import type { ApiClient } from './client'
-import { rec, str } from './types'
+import { clip, rec, str } from './types'
 import type { ExportFormat } from '../shared/messages'
 
 export interface ImageUpload {
@@ -60,9 +60,4 @@ export function toImageResult(v: unknown): ImageResult {
     attach_error: attErr.code ? { code: str(attErr.code), message: str(attErr.message) } : null,
     open_url: str(o.open_url),
   }
-}
-
-function clip(s: string, max: number) {
-  const chars = Array.from(s)
-  return chars.length > max ? chars.slice(0, max).join('') : s
 }

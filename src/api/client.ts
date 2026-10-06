@@ -85,8 +85,25 @@ export function createApiClient(opts: ApiClientOptions) {
     return err
   }
 
+  // putObject uploads bytes to a presigned storage URL. It goes straight to
+  // object storage, so it carries no Ogen token and its errors have no code.
+  async function putObject(url: string, body: Blob, signal?: AbortSignal): Promise<void> {
+    let res: Response
+    try {
+      res = await doFetch(url, { method: 'PUT', headers: { 'Content-Type': body.type }, body, signal })
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') throw err
+      throw new ApiError(0, 'network_error', 'Could not reach Ogen storage. Check your connection.')
+    }
+    // A storage 4xx (expired URL, bad signature) is not an Ogen auth or plan
+    // answer: report it as a plain 400 so the queue doesn't disconnect or
+    // stop on it. 5xx stays retryable.
+    if (!res.ok) throw new ApiError(res.status >= 500 ? res.status : 400, 'upload_failed', `Upload to storage failed (HTTP ${res.status}).`)
+  }
+
   return {
     request,
+    putObject,
 
     async me(signal?: AbortSignal): Promise<Me> {
       const { data } = await request('GET', '/me', { signal })

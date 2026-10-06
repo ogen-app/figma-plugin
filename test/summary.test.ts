@@ -25,6 +25,7 @@ describe('summary', () => {
       sent: 3,
       deduplicated: 1,
       notAttached: 1,
+      withIssues: 0,
       failed: 1,
       skipped: 1,
       openUrl: 'https://app.getogen.com/content-bank/assets/a1',
@@ -34,5 +35,15 @@ describe('summary', () => {
 
   it('says when nothing was sent', () => {
     expect(headline(summarize([]))).toBe('Nothing was sent')
+  })
+
+  it('counts videos attached with platform issues', () => {
+    const video = { kind: 'video', attachment: { id: 'v', post_id: 'p', duration_ms: 0, width: 0, height: 0 }, platform_validation: [], open_url: 'https://app/posts/p' } as const
+    const s = summarize([
+      { state: 'sent', result: { ...video, platform_validation: [] } },
+      { state: 'sent', result: { ...video, platform_validation: [] }, platformIssues: 'too long' },
+    ])
+    expect(s).toMatchObject({ sent: 2, deduplicated: 0, withIssues: 1, openUrl: 'https://app/posts/p' })
+    expect(headline(s)).toBe('2 sent · 1 with platform issues')
   })
 })

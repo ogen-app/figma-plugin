@@ -159,8 +159,8 @@ sequenceDiagram
   every `poll_interval_ms` until 200 (store the token), 403 (denied), 410 or
   `expires_at` (expired), or Cancel.
 - **Storage**: `figma.clientStorage` key `ogen` holds
-  `{token, workspace, user}`, and `ogen.prefs` holds `{format, scale}`. Main
-  refuses any other key.
+  `{token, workspace, user}`, and `ogen.prefs` holds `{format, scale, video,
+  videoFormat, videoQuality, videoScale}`. Main refuses any other key.
 - **Sending** (`src/queue/sendQueue.ts`): the UI asks main to export one node,
   uploads it, and only then asks for the next. That keeps a single full-size
   export in memory.
@@ -176,6 +176,48 @@ sequenceDiagram
   pixel cap at the chosen scale are flagged and skipped. Exports over
   `limits.max_image_bytes` (from `GET /me`) fail before upload.
 
+### Animated frames as video (CON-347)
+
+Frames animated with Figma Motion can be sent to a campaign post as MP4 or
+WebM.
+
+- **Detection** (`src/main/animation.ts`): for each selected layer, main walks
+  its top-level frame for Motion timelines, keyframes or animation styles (up
+  to 5,000 layers). Animated items get `animation: {durationSec, frame}`.
+- **What can be exported**: Figma renders video only from a frame placed
+  directly on a page, and always the whole frame. A nested layer that is
+  animated shows "Animated inside “Frame”" with **Use frame**, which selects
+  that frame. Groups, sections and components can't be sent as video.
+- **Sending**: Format → Video sends only the animated top-level frames. Videos
+  go to a post only, so "Content bank" is disabled. Posts the campaigns API
+  marks as taking no video (`video: null`) are disabled in the tree. Duration
+  and aspect ratio are checked against the post's `video` rules as warnings;
+  the server validates the real file.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant M as main (sandbox)
+    participant U as ui (iframe)
+    participant API as Ogen API
+    participant R2 as R2 storage
+
+    loop each animated frame, one at a time
+        U->>M: exportVideo {nodeId, format, quality, scale}
+        M->>M: frame.exportAsync({format: MP4|WEBM, fps: 30, quality, SCALE})
+        M-->>U: {bytes, nodeName, fileName}
+        U->>API: POST /posts/{id}/videos/presign {content_type, size_bytes}
+        API-->>U: {upload_url, s3_key}
+        U->>R2: PUT upload_url (no Ogen token)
+        U->>API: POST /posts/{id}/videos/finalize {s3_key, node_id, node_name, file_name}
+        API-->>U: 201 {attachment, platform_validation, open_url}
+    end
+```
+
+The presign and finalize endpoints are specified in CON-347 and built in
+ogen-app/ogen. A storage error is reported as a 400 `upload_failed`, so it
+never reads as a disconnect or a plan limit.
+
 ### Error handling
 
 | Response | Behaviour |
@@ -186,6 +228,8 @@ sequenceDiagram
 | 400 / 415 rejects | Mark the item failed and continue |
 | 503 / network | Retry once, then mark the item failed |
 | `attach_error` in a 201 | Item is in the bank; it shows why it wasn't attached |
+| `platform_validation` in a video 201 | The video is attached; it shows which platform rules it breaks |
+| Storage PUT 4xx / 5xx | 400 `upload_failed` marks the item failed; 5xx is retried once |
 
 ## Layout
 
@@ -218,4 +262,7 @@ they are on disk.
   image-service's default of 100 MP. If the API adds
   `limits.max_image_pixels`, the plugin already reads it.
 - [docs/spikes.md](docs/spikes.md) still needs to be run in Figma desktop
-  (Dev Mode export, file name visibility, sections and groups).
+  (Dev Mode export, file name visibility, sections and groups, video export).
+- Video sends need the CON-347 API endpoints (presign, finalize,
+  `limits.max_video_bytes`, per-post `video` rules). Until `/me` returns
+  `max_video_bytes`, the plugin assumes 200 MB.

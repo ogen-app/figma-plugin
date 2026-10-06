@@ -14,6 +14,18 @@ export interface CampaignPost {
   // False once the post was submitted for publishing (scheduled or
   // published): it can't take new images.
   attachable: boolean
+  // Video rules for this post (CON-347). null: the post can't take a video.
+  // undefined: the API doesn't say (older server), so nothing is checked.
+  video?: VideoRules | null
+}
+
+export interface VideoRules {
+  // 0 means no limit.
+  max_duration_seconds: number
+  // Ratios like "9:16"; empty means any.
+  allowed_aspect_ratios: string[]
+  // 0 means no limit.
+  max_per_post: number
 }
 
 export interface Campaign {
@@ -62,6 +74,18 @@ function toPost(v: unknown): CampaignPost {
     scheduled_at: nullableStr(o.scheduled_at),
     attachment_count: num(o.attachment_count, 0),
     attachable: o.attachable === true,
+    ...('video' in o ? { video: toVideoRules(o.video) } : {}),
+  }
+}
+
+function toVideoRules(v: unknown): VideoRules | null {
+  if (v === null || typeof v !== 'object') return null
+  const o = rec(v)
+  const ratios = Array.isArray(o.allowed_aspect_ratios) ? o.allowed_aspect_ratios : []
+  return {
+    max_duration_seconds: num(o.max_duration_seconds, 0),
+    allowed_aspect_ratios: ratios.filter((r): r is string => typeof r === 'string'),
+    max_per_post: num(o.max_per_post, 0),
   }
 }
 
