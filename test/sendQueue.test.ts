@@ -72,7 +72,7 @@ describe('runSendQueue', () => {
   })
 
   it('passes the post id and reports attach errors without failing the item', async () => {
-    const post = { id: 'p1', title: 'Launch', status: 'draft', platform: '', campaign: null, updated_at: '', attachment_count: 0 }
+    const post = { id: 'p1', title: 'Launch', campaignName: 'Q4', platformName: 'LinkedIn' }
     const t = setup([
       result('a1', { attachment: { id: 'att', post_id: 'p1' } }),
       result('a2', { attach_error: { code: 'post_locked', message: 'locked' } }),

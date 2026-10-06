@@ -125,7 +125,11 @@ the manifest. Figma ignores it for published plugins.
          content bank with `origin=figma` and generated alt text.
    - [ ] **Dedupe:** re-send the same frames unchanged. Each shows "Already
          in Ogen".
-   - [ ] **Send to a draft post:** the image is attached to the post.
+   - [ ] **Campaign tree:** Campaigns lists the workspace's campaigns
+         (archived ones hidden). Posts are grouped by date in each campaign's
+         timezone, and those dates match the web app. Scheduled and published
+         posts are greyed out.
+   - [ ] **Send to a campaign post:** the image is attached to the post.
    - [ ] **Locked post:** sending to a submitted post shows "not attached",
          and the image is still in the bank.
    - [ ] **JPG and 3×:** export works, and the size shown matches the asset.
@@ -227,12 +231,12 @@ Keep the copy and artwork in version control, for example under
 | Field | Value / spec |
 | -- | -- |
 | Name | Ogen |
-| Tagline | Send frames to your Ogen content bank or a draft post in one click |
+| Tagline | Send frames to your Ogen content bank or a campaign post in one click |
 | Description | What it does, the one-time Connect step, what gets sent (PNG/JPG at 1–3×, frame name and file name), and that SVG isn't supported |
 | Category | Design tools (or the closest marketing/export category Figma offers) |
 | Icon | `assets/icon-128.png` (128 × 128, rendered from `assets/icon.svg`). Figma's manifest has no icon field, so the icon only appears once it's uploaded here; development builds show Figma's default icon |
 | Thumbnail | 1920 × 1080 px |
-| Carousel | Up to 9 images or videos: Connect, Send screen, draft-post picker, Result |
+| Carousel | Up to 9 images or videos: Connect, Send screen, campaign tree, Result |
 | Support contact | A shared support address or URL, not a personal one |
 | Network access | Shown automatically from `allowedDomains` (`api.getogen.com`) |
 | Contributors | Ogen maintainers who may publish updates |
@@ -249,7 +253,7 @@ Facts for the security disclosure form:
   no third-party services and no analytics.
 - **Authentication:** a one-time pairing in the browser gives the plugin a
   revocable token, scoped to one Ogen workspace. The token can only upload
-  images and list draft-post titles.
+  images and list campaign and post titles (never post text).
 - **Storage:** the token and the user's format and scale preference are kept
   in `figma.clientStorage` on the user's machine. Nothing is stored on
   Figma's servers.

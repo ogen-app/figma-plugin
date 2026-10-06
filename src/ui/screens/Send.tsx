@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'preact/hooks'
 import type { ApiClient } from '../../api/client'
-import type { PluginPost } from '../../api/posts'
 import { DEFAULT_LIMITS, type Me } from '../../api/types'
-import type { SendRequest } from '../../queue/types'
+import type { PostTarget, SendRequest } from '../../queue/types'
 import type { ExportFormat, Scale } from '../../shared/messages'
 import type { Bridge } from '../bridge'
 import { Header } from '../components/Header'
-import { PostPicker } from '../components/PostPicker'
+import { CampaignPicker } from '../components/CampaignPicker'
 import { Segmented } from '../components/Segmented'
 import { SelectionList } from '../components/SelectionList'
 import { useSelection } from '../hooks/useSelection'
 import { pixelWarning } from '../../queue/preflight'
 import { DEFAULT_PREFS, type Prefs, type Store, type StoredSession } from '../storage'
+
+const DEFAULT_HEIGHT = 540
+const TALL_HEIGHT = 700
 
 const FORMATS = [
   { value: 'PNG', label: 'PNG' },
@@ -38,12 +40,19 @@ export function SendScreen({ bridge, api, store, session, me, onDisconnect, onSe
   const selection = useSelection(bridge)
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS)
   const [toPost, setToPost] = useState(false)
-  const [post, setPost] = useState<PluginPost | null>(null)
+  const [post, setPost] = useState<PostTarget | null>(null)
   const limits = me?.limits ?? DEFAULT_LIMITS
 
   useEffect(() => {
     void store.loadPrefs().then(setPrefs, () => undefined)
   }, [store])
+
+  // The campaign tree needs room; grow the window while it's open.
+  const picking = toPost && !post
+  useEffect(() => {
+    bridge.send({ type: 'resize', height: picking ? TALL_HEIGHT : DEFAULT_HEIGHT })
+  }, [bridge, picking])
+  useEffect(() => () => bridge.send({ type: 'resize', height: DEFAULT_HEIGHT }), [bridge])
 
   function updatePrefs(patch: Partial<Prefs>) {
     const next = { ...prefs, ...patch }
@@ -83,11 +92,11 @@ export function SendScreen({ bridge, api, store, session, me, onDisconnect, onSe
           value={toPost ? 'post' : 'bank'}
           options={[
             { value: 'bank', label: 'Content bank' },
-            { value: 'post', label: 'Draft post…' },
+            { value: 'post', label: 'Campaigns' },
           ]}
           onChange={(v) => setToPost(v === 'post')}
         />
-        {toPost && <PostPicker api={api} selected={post} onSelect={setPost} />}
+        {toPost && <CampaignPicker api={api} selected={post} onSelect={setPost} />}
       </section>
 
       <footer class="footer">

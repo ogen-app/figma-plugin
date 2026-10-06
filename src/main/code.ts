@@ -16,7 +16,8 @@ const SELECTION_DEBOUNCE_MS = 150
 
 type ExportableNode = SceneNode & ExportMixin & DimensionAndPositionMixin & { type: ExportableType }
 
-figma.showUI(__html__, { width: 360, height: 540, themeColors: true })
+const UI_WIDTH = 360
+figma.showUI(__html__, { width: UI_WIDTH, height: 540, themeColors: true })
 
 if (__DEV__) {
   // Spike readout (docs/spikes.md): which editor we run in, and whether the
@@ -63,6 +64,9 @@ figma.ui.onmessage = (msg: UiToMain) => {
       break
     case 'notify':
       figma.notify(msg.message, { error: msg.error })
+      break
+    case 'resize':
+      figma.ui.resize(UI_WIDTH, Math.round(Math.min(Math.max(msg.height, 400), 800)))
       break
   }
 }
