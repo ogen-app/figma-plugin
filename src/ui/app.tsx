@@ -3,11 +3,13 @@ import { createApiClient, isApiError } from '../api/client'
 import { sendImage } from '../api/images'
 import { DEFAULT_LIMITS, type Me } from '../api/types'
 import { runSendQueue, type ItemStatus, type QueueOutcome } from '../queue/sendQueue'
+import { headline, summarize } from '../queue/summary'
 import type { SendRequest } from '../queue/types'
 import { sleep } from '../queue/sleep'
 import type { Bridge } from './bridge'
 import { ConnectScreen } from './screens/Connect'
 import { SendScreen } from './screens/Send'
+import { ResultScreen } from './screens/Result'
 import { SendingScreen } from './screens/Sending'
 import { createStore, type StoredSession } from './storage'
 
@@ -121,7 +123,12 @@ export function App({ bridge }: { bridge: Bridge }) {
     )
     // On 401 the client already moved us to Connect.
     if (outcome.kind === 'unauthorized') return
-    setView((v) => (v.name === 'sending' && v.request === request ? { ...v, outcome } : v))
+    setView((v) => {
+      if (v.name !== 'sending' || v.request !== request) return v
+      const summary = summarize(v.statuses)
+      bridge.send({ type: 'notify', message: headline(summary), error: summary.sent === 0 })
+      return { ...v, outcome }
+    })
   }
 
   function backToSend() {
@@ -146,14 +153,10 @@ export function App({ bridge }: { bridge: Bridge }) {
         />
       )
     case 'sending':
-      return (
-        <SendingScreen
-          request={view.request}
-          statuses={view.statuses}
-          outcome={view.outcome}
-          onCancel={() => sendAbort.current?.abort()}
-          onDone={backToSend}
-        />
+      return view.outcome ? (
+        <ResultScreen request={view.request} statuses={view.statuses} outcome={view.outcome} onBack={backToSend} />
+      ) : (
+        <SendingScreen request={view.request} statuses={view.statuses} onCancel={() => sendAbort.current?.abort()} />
       )
   }
 }
