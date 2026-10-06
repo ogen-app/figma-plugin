@@ -69,13 +69,66 @@ CI runs the same checks and a production build on every PR.
 
 ## How it works
 
+The plugin runs in two halves. `main` (`src/main`) runs in Figma's sandbox:
+it has the `figma.*` API but no network. `ui` (`src/ui`) is an iframe with
+origin `null`: it makes every request to Ogen but has no `figma.*`. They talk
+through `postMessage` (`src/shared/messages.ts`).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor D as Designer
+    participant M as main (sandbox)
+    participant U as ui (iframe)
+    participant API as Ogen API
+
+    U->>M: ready
+    M-->>U: init {userName, fileName}
+    U->>M: storageGet("ogen")
+    M-->>U: {token, workspace, user} or null
+    opt token stored
+        U->>API: GET /me (Bearer ogp_…)
+        API-->>U: workspace, limits (401 → clear token, Connect)
+    end
+
+    D->>M: select frames
+    M-->>U: selection [{id, name, type, w, h}]
+    M-->>U: thumbnail {id, bytes} per frame (96px)
+
+    D->>U: Send (format, scale, bank or draft post)
+    loop each frame, one at a time
+        U->>M: exportNode {nodeId, format, scale}
+        M->>M: node.exportAsync({format, SCALE})
+        M-->>U: {bytes, nodeName, fileName}
+        U->>API: POST /images (multipart file + node_id, node_name, file_name, post_id?)
+        API-->>U: 201 {asset, deduplicated, attachment, attach_error, open_url}
+        Note over U,API: 429 → wait Retry-After · 503/network → retry once<br/>402/403 → stop queue · 400/415 → mark item, continue
+    end
+    U->>M: notify "3 sent · 1 already in Ogen"
+    U-->>D: Result screen · Open in Ogen ↗
 ```
-main (src/main, Figma sandbox)          ui (src/ui, iframe, origin "null")
-  figma.* API, no network                 fetch to the Ogen API, no figma.*
-  ─ selection + 96px thumbnails ──────▶   Send screen
-  ◀── exportNode {id, format, scale} ──   send queue, one item at a time
-  ─ {bytes, node name, file name} ────▶   POST /api/plugins/figma/images
-  ◀── storageGet/Set/Delete ───────────   token + prefs in clientStorage
+
+Pairing (Connect screen) runs in the UI alone:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as ui (iframe)
+    participant API as Ogen API
+    participant B as Browser (Ogen web app)
+    participant M as main (sandbox)
+
+    U->>API: POST /pairings {client_label: "Figma · Jane"}
+    API-->>U: 201 {read_key, approve_url, expires_at, poll_interval_ms}
+    U->>B: window.open(approve_url)
+    loop every poll_interval_ms until expires_at
+        U->>API: GET /pairings/{read_key}
+        API-->>U: 202 pending
+    end
+    Note over B: user signs in, picks workspace, clicks Allow
+    U->>API: GET /pairings/{read_key}
+    API-->>U: 200 {token, workspace, user} (403 denied · 410 expired)
+    U->>M: storageSet("ogen", {token, workspace, user})
 ```
 
 - **Pairing** (`src/api/pairing.ts`): `POST /pairings`, then the approve URL
