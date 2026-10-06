@@ -20,10 +20,13 @@ plugin: [CON-340](https://linear.app/ogen/issue/CON-340).
 
 ```sh
 npm ci
-npm run dev        # dev build in watch mode, API at http://localhost:9001
+npm run dev          # dev build in watch mode, API at http://localhost:9001
+npm run dev:remote   # same, against the dev environment (https://api.dev.getogen.com)
 ```
 
-1. Start the Ogen API locally on `:9001` (the port `ogen-app/ui` proxies to).
+1. Start the Ogen API locally on `:9001` (the port `ogen-app/ui` proxies to),
+   or use `npm run dev:remote` to skip the local stack and talk to the dev
+   environment.
 2. In Figma desktop: **Plugins → Development → Import plugin from manifest…**
    and pick this repo's `manifest.json`.
 3. Run it from **Plugins → Development → Ogen**. Rebuilds are picked up the
@@ -46,25 +49,29 @@ stack, set it in `ogen/.env` and run the Ogen UI (the approval page is
 APP_BASE_URL=http://localhost:9002
 ```
 
-To use a different API (for example staging), set `OGEN_API_URL`:
+To use another API, set `OGEN_API_URL` (that's all `dev:remote` does):
 
 ```sh
-OGEN_API_URL=https://staging-api.example.com npm run build:dev
+OGEN_API_URL=https://api.dev.getogen.com npm run build:dev
 ```
 
 The origin must be listed in `manifest.json` → `networkAccess`. Figma blocks
-every other origin, and the build fails early if it is missing.
+every other origin, and the build fails early if it is missing. Dev builds may
+use `allowedDomains` or `devAllowedDomains`; production builds only
+`allowedDomains`.
 
 ## Builds
 
 | Command | API origin | Notes |
 | -- | -- | -- |
 | `npm run build:dev` | `http://localhost:9001` | unminified, prints the spike readout |
+| `npm run build:dev:remote` | `https://api.dev.getogen.com` | as `build:dev`, against the dev environment |
 | `npm run build:prod` | `https://api.getogen.com` | minified; what gets published |
 
 There is one `manifest.json` for both builds. `allowedDomains` holds the
-production API, and `devAllowedDomains` holds localhost, which Figma only
-honours for plugins under development. The API origin is compiled into the
+production API, and `devAllowedDomains` holds localhost and the dev
+environment (`https://api.dev.getogen.com`), which Figma only honours for
+plugins under development. The API origin is compiled into the
 bundle (`__API_BASE__`), so the two builds differ only in `dist/`.
 
 `dist/code.js` is the main-thread bundle. `dist/ui.html` is the UI with its
@@ -182,24 +189,16 @@ test/          vitest unit tests
 
 ## Release
 
-Publishing to the Figma Community is tracked in
-[CON-341](https://linear.app/ogen/issue/CON-341).
-
-1. In Figma desktop, **Plugins → Development → New plugin…** once, to get the
-   plugin id. Put it in `manifest.json` → `id`, replacing the
-   `ogen-send-to-ogen` placeholder.
-2. Bump `version` in `package.json` and merge to `main`.
-3. Run `npm ci && npm run build:prod` from a clean checkout of `main`. Never
-   publish a dev build: it points at localhost.
-4. Re-import `manifest.json` if needed, then go to **Plugins → Development →
-   Ogen → Publish…**. Figma uploads `manifest.json` and the `dist/` files as
-   they are on disk.
-5. Tag the release: `git tag v<version> && git push --tags`.
+See [RELEASE.md](RELEASE.md) for the full process: prerequisites, the clean
+production build and its checks, the smoke test, publishing in Figma, tagging
+and rollback. In short, publish only a fresh `npm run build:prod` from a
+clean `main`, because Figma uploads `manifest.json` and `dist/` exactly as
+they are on disk.
 
 ## Open items
 
 - The manifest `id` is a placeholder until the plugin is created in Figma
-  (release step 1).
+  (see [RELEASE.md](RELEASE.md) prerequisites).
 - The production API origin is assumed to be `https://api.getogen.com`. Update
   `manifest.json` and `scripts/build.mjs` if it differs.
 - `GET /me` doesn't return a pixel cap yet, so the plugin assumes

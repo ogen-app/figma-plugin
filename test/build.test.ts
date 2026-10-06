@@ -12,6 +12,15 @@ describe('build', () => {
     expect(html).toContain('http://localhost:9001')
   })
 
+  it('accepts the dev environment only in dev builds', () => {
+    const env = { ...process.env, OGEN_API_URL: 'https://api.dev.getogen.com' }
+    execFileSync('node', ['scripts/build.mjs', '--mode', 'dev'], { stdio: 'pipe', env })
+    expect(readFileSync('dist/ui.html', 'utf8')).toContain('https://api.dev.getogen.com')
+    expect(() => execFileSync('node', ['scripts/build.mjs', '--mode', 'prod'], { stdio: 'pipe', env })).toThrow(
+      /not in manifest\.json networkAccess/,
+    )
+  })
+
   it('refuses an API origin missing from the manifest', () => {
     expect(() =>
       execFileSync('node', ['scripts/build.mjs', '--mode', 'prod'], {
