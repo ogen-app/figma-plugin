@@ -1,0 +1,30 @@
+{
+  "name": "@ogen-app/figma-plugin",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Ogen Figma plugin: send selected frames to an Ogen workspace",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "node scripts/build.mjs --mode dev --watch",
+    "build:dev": "node scripts/build.mjs --mode dev",
+    "build:prod": "node scripts/build.mjs --mode prod",
+    "build": "npm run build:prod",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.main.json && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm test"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.141.0",
+    "@types/node": "^26.6.4",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  },
+  "dependencies": {
+    "preact": "^11.0.0"
+  }
+}

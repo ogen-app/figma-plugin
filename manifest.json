@@ -1,0 +1,14 @@
+{
+  "name": "Ogen",
+  "id": "ogen-send-to-ogen",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "permissions": ["currentuser"],
+  "networkAccess": {
+    "allowedDomains": ["https://api.getogen.com"],
+    "devAllowedDomains": ["http://localhost:9001"]
+  }
+}
