@@ -1,6 +1,6 @@
 import type { Limits } from '../../api/types'
 import type { Scale, SelectionItem } from '../../shared/messages'
-import { outputSize, pixelWarning } from '../preflight'
+import { outputSize, pixelWarning } from '../../queue/preflight'
 
 export interface SelectionListProps {
   items: SelectionItem[]

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_LIMITS } from '../src/api/types'
 import type { SelectionItem } from '../src/shared/messages'
-import { bytesWarning, formatBytes, outputSize, pixelWarning } from '../src/ui/preflight'
+import { bytesWarning, formatBytes, outputSize, pixelWarning } from '../src/queue/preflight'
 
 const frame = (width: number, height: number): SelectionItem => ({ id: '1:2', name: 'Hero', type: 'FRAME', width, height })
 

@@ -1,3 +1,4 @@
+import { sleep as defaultSleep } from '../queue/sleep'
 import { isApiError, type ApiClient } from './client'
 import { num, parseSession, rec, str, type StoredSession } from './types'
 
@@ -67,7 +68,7 @@ export interface WaitOptions {
 // the signal aborts. Transient failures (network, 5xx, 429) keep polling.
 export async function waitForApproval(api: ApiClient, start: PairingStart, opts: WaitOptions): Promise<PairingOutcome> {
   const now = opts.now ?? Date.now
-  const sleep = opts.sleep ?? abortableSleep
+  const sleep = opts.sleep ?? defaultSleep
   const parsed = Date.parse(start.expires_at)
   const deadline = Number.isNaN(parsed) ? now() + PAIRING_TTL_MS : parsed
   const interval = Math.min(Math.max(start.poll_interval_ms, 1000), 10_000)
@@ -94,21 +95,6 @@ export async function waitForApproval(api: ApiClient, start: PairingStart, opts:
       else if (err.status !== 0 && err.status < 500 && err.status !== 429) throw err
     }
   }
-}
-
-export function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) return reject(signal.reason)
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort)
-      resolve()
-    }, ms)
-    const onAbort = () => {
-      clearTimeout(timer)
-      reject(signal.reason)
-    }
-    signal.addEventListener('abort', onAbort, { once: true })
-  })
 }
 
 export function isHttpUrl(value: string): boolean {
