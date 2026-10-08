@@ -2,6 +2,7 @@ import {
   BOARD_SCHEMA,
   DATA_KEYS,
   LAYOUT,
+  MOVED_FROM,
   cellAt,
   columnWidth,
   columnX,
@@ -445,9 +446,11 @@ export async function syncBoard(pageId: string, plan: BoardPlan): Promise<BoardS
   // Rescheduled posts: their frames follow the post to its new day.
   const byId = new Map(frames.map((fr) => [fr.node.id, fr.node]))
   const moved = new Set<string>()
+  const stuck = new Map<string, PlannedPost>()
   for (const { post, nodeIds } of diff.moves) {
     const nodes = nodeIds.map((id) => byId.get(id)).filter((n): n is FrameNode => !!n)
-    if (moveFrames(page, grid, plan, post, nodes, f)) for (const n of nodes) moved.add(n.id)
+    for (const id of moveFrames(page, grid, plan, post, nodes, f)) moved.add(id)
+    for (const n of nodes) if (!moved.has(n.id)) stuck.set(n.id, post)
   }
 
   const notes = notesByFrame(page)
@@ -459,9 +462,15 @@ export async function syncBoard(pageId: string, plan: BoardPlan): Promise<BoardS
     if (slot && node.name !== slot.name && (node.name === slot.legacyName || node.name === link.name)) node.name = slot.name
     if (isUntouched(node, LEGACY_PLACEHOLDER)) node.fills = [{ type: 'SOLID', color: COLORS.placeholder }]
     if (!link.seed && isUntouched(node, COLORS.placeholder)) seedable.push({ nodeId: node.id, postId: link.postId, slot: link.slot })
+    // A frame that couldn't move (nested in another layer) says where its
+    // post went instead.
+    const stuckPost = stuck.get(node.id)
+    const issues = (diff.issues.get(node.id) ?? []).map((line) =>
+      stuckPost && line.startsWith(MOVED_FROM) ? `Moved to ${stuckPost.dayLabel}` : line,
+    )
     const next: FrameLink = {
       ...link,
-      issues: diff.issues.get(node.id) ?? [],
+      issues,
       note: slot?.note ?? link.note,
       name: slot?.name ?? link.name,
       dayKey: moved.has(node.id) && post ? post.dayKey : link.dayKey,
@@ -526,9 +535,10 @@ function addPost(page: PageNode, grid: Grid, plan: BoardPlan, post: PlannedPost,
 // moveFrames puts a rescheduled post's frames at the bottom of its new day
 // (or of the unscheduled row), keeping their arrangement, and grows the row
 // when it runs out of room. Frames nested inside other layers stay where
-// they are. Returns whether the frames moved.
-function moveFrames(page: PageNode, grid: Grid, plan: BoardPlan, post: PlannedPost, frames: FrameNode[], f: Fonts): boolean {
-  if (frames.length === 0 || frames.some((n) => n.parent !== page)) return false
+// they are. Returns the ids of the frames it moved.
+function moveFrames(page: PageNode, grid: Grid, plan: BoardPlan, post: PlannedPost, all: FrameNode[], f: Fonts): string[] {
+  const frames = all.filter((n) => n.parent === page)
+  if (frames.length === 0) return []
   const key = post.dayKey ? mondayOf(post.dayKey) : ''
   let row = grid.rows.find((r) => r.key === key)
   if (!row) row = key ? insertRow(page, grid, plan.weeks.find((w) => w.key === key) ?? fallbackWeek(key), f) : insertRow(page, grid, null, f)
@@ -536,7 +546,7 @@ function moveFrames(page: PageNode, grid: Grid, plan: BoardPlan, post: PlannedPo
 
   // The arrangement, read before a row grows and shifts things.
   const group = frames.map((node) => ({ node, x: node.x, y: node.y, height: node.height })).sort(readingOrder)
-  const left = group[0]!.x
+  const left = Math.min(...group.map((g) => g.x))
   const top = Math.min(...group.map((g) => g.y))
   const height = Math.max(...group.map((g) => g.y + g.height)) - top
 
@@ -554,7 +564,7 @@ function moveFrames(page: PageNode, grid: Grid, plan: BoardPlan, post: PlannedPo
     g.node.x = x + (g.x - left)
     g.node.y = start + (g.y - top)
   }
-  return true
+  return frames.map((n) => n.id)
 }
 
 // insertRow adds a week (or the unscheduled row) in date order, moving
