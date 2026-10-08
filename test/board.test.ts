@@ -216,6 +216,19 @@ describe('diffBoard', () => {
     expect(diff.issues.get('b')).toEqual(['Moved from Mon, Jun 3'])
   })
 
+  it('moves only the frames not on the new day yet', () => {
+    // 'moved' is now on Wed, Jun 5. Its first slide is still on Mon; the
+    // designer already dragged the second one to Wed.
+    const diff = diffBoard(plan, [
+      frame('s1', link('moved'), '2030-06-03', 0, 0),
+      frame('s2', link('moved', { slot: 1 }), '2030-06-05', 5000, 0),
+    ])
+    expect(diff.moves.map((m) => m.nodeIds)).toEqual([['s1']])
+    expect(diff.issues.get('s1')).toEqual(['Moved from Mon, Jun 3'])
+    expect(diff.issues.get('s2')).toEqual([])
+    expect(diff.counts.moved).toBe(1)
+  })
+
   it("keeps a now text-only post's frames where they are", () => {
     const { plan: p } = planBoard(
       campaign([post('t', '2030-06-05T09:00:00Z', { post_type: 'text-post', media: rule('text-post', { allowed_kinds: [], min_attachments: 0, max_attachments: 0 }) })]),

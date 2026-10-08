@@ -435,9 +435,13 @@ export function diffBoard(plan: BoardPlan, frames: ExistingFrame[]): SyncDiff {
   const counts = { added: 0, deleted: 0, moved: 0, changed: 0 }
   for (const [postId, group] of byPost) {
     const post = posts.get(postId)
-    const { lines, moved } = postIssues(plan, post, group, counts)
-    for (const f of group) issues.set(f.nodeId, lines)
-    if (moved && post) moves.push({ post, nodeIds: group.map((f) => f.nodeId) })
+    const { lines, from } = postIssues(plan, post, group, counts)
+    // A rescheduled post moves only its frames that aren't on the new day
+    // yet: one the designer already dragged there stays where they put it.
+    const stray = post && from !== null ? group.filter((f) => (f.cell ?? f.link.dayKey) !== post.dayKey) : []
+    const movedLine = from !== null ? `${MOVED_FROM}${dayLabelOf(plan, from)}` : ''
+    for (const f of group) issues.set(f.nodeId, stray.includes(f) ? [movedLine, ...lines] : lines)
+    if (post && stray.length > 0) moves.push({ post, nodeIds: stray.map((f) => f.nodeId) })
   }
 
   const add = plan.posts.filter((p) => p.slots.length > 0 && !byPost.has(p.postId))
@@ -451,17 +455,17 @@ export function dayLabelOf(plan: BoardPlan, dayKey: string): string {
   return plan.weeks.find((w) => w.key === mondayOf(dayKey))?.days[dayIndex(dayKey)] || dayKey
 }
 
-// postIssues are the lines every frame of one post shows, and whether its
-// frames move to the post's new day.
-function postIssues(plan: BoardPlan, post: PlannedPost | undefined, frames: ExistingFrame[], counts: SyncDiff['counts']): { lines: string[]; moved: boolean } {
+// postIssues are the lines every frame of one post shows, and the day the
+// post was rescheduled from (null when it wasn't).
+function postIssues(plan: BoardPlan, post: PlannedPost | undefined, frames: ExistingFrame[], counts: SyncDiff['counts']): { lines: string[]; from: string | null } {
   if (!post) {
     // An incomplete list can't prove a deletion.
-    if (!plan.complete) return { lines: [], moved: false }
+    if (!plan.complete) return { lines: [], from: null }
     counts.deleted++
-    return { lines: [ISSUE.deleted], moved: false }
+    return { lines: [ISSUE.deleted], from: null }
   }
   const lines: string[] = []
-  let moved = false
+  let from: string | null = null
   // The post's day is where its first frame sits, so slides spilling into
   // the next column don't count. A frame dragged to the right day is where it
   // belongs; one off the grid is judged by the day it was placed for.
@@ -469,9 +473,8 @@ function postIssues(plan: BoardPlan, post: PlannedPost | undefined, frames: Exis
   const day = first.cell ?? first.link.dayKey
   // A text-only post's frames stay: there's no placeholder to move them to.
   if (day !== post.dayKey && post.slots.length > 0) {
-    lines.push(`${MOVED_FROM}${dayLabelOf(plan, day)}`)
     counts.moved++
-    moved = true
+    from = day
   }
   if (post.slots.length === 0) {
     lines.push(ISSUE.textOnly)
@@ -487,7 +490,7 @@ function postIssues(plan: BoardPlan, post: PlannedPost | undefined, frames: Exis
   if (post.attachmentIds && frames.some((f) => f.link.seed && !post.attachmentIds!.includes(f.link.seed.attachmentId))) {
     lines.push(ISSUE.imageRemoved)
   }
-  return { lines, moved }
+  return { lines, from }
 }
 
 // syncSummary is the one-line result, e.g. "3 added · 1 deleted · 2 moved".
