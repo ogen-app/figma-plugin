@@ -506,9 +506,11 @@ export function noteChips(link: Pick<FrameLink, 'issues' | 'sent' | 'seed'>): Ch
 }
 
 // sameColor compares colours the way Figma keeps them: as 32-bit floats, so
-// a channel written as 236/255 reads back slightly different.
+// a channel written as 236/255 reads back slightly different. The tolerance
+// covers float32 rounding (about 6e-8 near 1) and nothing more: any colour a
+// designer can pick differs by far more.
 export function sameColor(a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }): boolean {
-  const near = (x: number, y: number) => Math.abs(x - y) < 1 / 1024
+  const near = (x: number, y: number) => Math.abs(x - y) < 1e-6
   return near(a.r, b.r) && near(a.g, b.g) && near(a.b, b.b)
 }
 
