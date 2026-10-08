@@ -402,8 +402,14 @@ export interface SyncDiff {
   add: PlannedPost[]
   // The issue lines each frame should show now; [] clears them.
   issues: Map<string, string[]>
+  // Rescheduled posts: their frames go to the post's new day (or the
+  // unscheduled row), keeping their arrangement.
+  moves: Array<{ post: PlannedPost; nodeIds: string[] }>
   counts: { added: number; deleted: number; moved: number; changed: number }
 }
+
+// The line a moved post's frames show until the next sync.
+export const MOVED_FROM = 'Moved from '
 
 export const ISSUE = {
   deleted: 'Deleted in Ogen',
@@ -412,8 +418,9 @@ export const ISSUE = {
   imageRemoved: 'Image removed in Ogen',
 } as const
 
-// diffBoard compares the board's frames with the plan. It never moves or
-// removes a frame: it lists what to add and what each frame should flag.
+// diffBoard compares the board's frames with the plan: what to add, which
+// rescheduled posts' frames to move, and what each frame should flag. It
+// never removes a frame: a deleted post's frames stay, flagged.
 export function diffBoard(plan: BoardPlan, frames: ExistingFrame[]): SyncDiff {
   const posts = new Map(plan.posts.map((p) => [p.postId, p]))
   const byPost = new Map<string, ExistingFrame[]>()
@@ -424,34 +431,47 @@ export function diffBoard(plan: BoardPlan, frames: ExistingFrame[]): SyncDiff {
   }
 
   const issues = new Map<string, string[]>()
+  const moves: SyncDiff['moves'] = []
   const counts = { added: 0, deleted: 0, moved: 0, changed: 0 }
   for (const [postId, group] of byPost) {
-    const lines = postIssues(plan, posts.get(postId), group, counts)
+    const post = posts.get(postId)
+    const { lines, moved } = postIssues(plan, post, group, counts)
     for (const f of group) issues.set(f.nodeId, lines)
+    if (moved && post) moves.push({ post, nodeIds: group.map((f) => f.nodeId) })
   }
 
   const add = plan.posts.filter((p) => p.slots.length > 0 && !byPost.has(p.postId))
   counts.added = add.length
-  return { add, issues, counts }
+  return { add, issues, moves, counts }
 }
 
-// postIssues are the lines every frame of one post shows.
-function postIssues(plan: BoardPlan, post: PlannedPost | undefined, frames: ExistingFrame[], counts: SyncDiff['counts']): string[] {
+// dayLabelOf is a day's label as the board shows it, e.g. "Tue, Aug 4".
+export function dayLabelOf(plan: BoardPlan, dayKey: string): string {
+  if (!dayKey) return 'Unscheduled'
+  return plan.weeks.find((w) => w.key === mondayOf(dayKey))?.days[dayIndex(dayKey)] || dayKey
+}
+
+// postIssues are the lines every frame of one post shows, and whether its
+// frames move to the post's new day.
+function postIssues(plan: BoardPlan, post: PlannedPost | undefined, frames: ExistingFrame[], counts: SyncDiff['counts']): { lines: string[]; moved: boolean } {
   if (!post) {
     // An incomplete list can't prove a deletion.
-    if (!plan.complete) return []
+    if (!plan.complete) return { lines: [], moved: false }
     counts.deleted++
-    return [ISSUE.deleted]
+    return { lines: [ISSUE.deleted], moved: false }
   }
   const lines: string[] = []
+  let moved = false
   // The post's day is where its first frame sits, so slides spilling into
   // the next column don't count. A frame dragged to the right day is where it
   // belongs; one off the grid is judged by the day it was placed for.
   const first = frames.slice().sort(readingOrder)[0]!
   const day = first.cell ?? first.link.dayKey
-  if (day !== post.dayKey) {
-    lines.push(post.dayKey ? `Moved to ${post.dayLabel}` : 'Now unscheduled')
+  // A text-only post's frames stay: there's no placeholder to move them to.
+  if (day !== post.dayKey && post.slots.length > 0) {
+    lines.push(`${MOVED_FROM}${dayLabelOf(plan, day)}`)
     counts.moved++
+    moved = true
   }
   if (post.slots.length === 0) {
     lines.push(ISSUE.textOnly)
@@ -467,7 +487,7 @@ function postIssues(plan: BoardPlan, post: PlannedPost | undefined, frames: Exis
   if (post.attachmentIds && frames.some((f) => f.link.seed && !post.attachmentIds!.includes(f.link.seed.attachmentId))) {
     lines.push(ISSUE.imageRemoved)
   }
-  return lines
+  return { lines, moved }
 }
 
 // syncSummary is the one-line result, e.g. "3 added · 1 deleted · 2 moved".
@@ -500,7 +520,8 @@ export function noteChips(link: Pick<FrameLink, 'issues' | 'sent' | 'seed'>): Ch
     if (link.seed.cropped) chips.push({ text: 'Image cropped to fit', tone: 'muted' })
   }
   for (const issue of link.issues) {
-    chips.push(MUTED_ISSUES.has(issue) ? { text: issue, tone: 'muted' } : { text: `⚠ ${issue}`, tone: 'danger' })
+    const muted = MUTED_ISSUES.has(issue) || issue.startsWith(MOVED_FROM)
+    chips.push(muted ? { text: issue, tone: 'muted' } : { text: `⚠ ${issue}`, tone: 'danger' })
   }
   return chips
 }

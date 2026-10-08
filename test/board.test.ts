@@ -175,11 +175,13 @@ describe('diffBoard', () => {
     expect(diff.add.map((p) => p.postId)).toEqual(['new'])
     expect(Object.fromEntries(diff.issues)).toEqual({
       '1': [],
-      '2': ['Moved to Wed, Jun 5'],
+      // The frame was on Mon, Jun 3 (link('moved') is placed there).
+      '2': ['Moved from Mon, Jun 3'],
       '3': ['Now Instagram Story · 1080×1920'],
       '4': ["Scheduled, can't take new media"],
       '5': ['Deleted in Ogen'],
     })
+    expect(diff.moves.map((m) => [m.post.postId, m.post.dayKey, m.nodeIds])).toEqual([['moved', '2030-06-05', ['2']]])
     expect(diff.counts).toEqual({ added: 1, deleted: 1, moved: 1, changed: 1 })
     expect(syncSummary(diff.counts)).toBe('1 added · 1 deleted · 1 moved · 1 changed')
   })
@@ -187,6 +189,7 @@ describe('diffBoard', () => {
   it('accepts a frame the designer dragged to the right day', () => {
     const diff = diffBoard(plan, [frame('2', link('moved'), '2030-06-05')])
     expect(diff.issues.get('2')).toEqual([])
+    expect(diff.moves).toEqual([])
   })
 
   it('judges a post by its first frame, so spilled slides are not moved', () => {
@@ -200,6 +203,27 @@ describe('diffBoard', () => {
     const diff = diffBoard({ ...plan, complete: false }, [frame('5', link('gone'))])
     expect(diff.issues.get('5')).toEqual([])
     expect(diff.counts.deleted).toBe(0)
+  })
+
+  it('moves an unscheduled post that got a date, and one that lost it', () => {
+    const { plan: p } = planBoard(campaign([post('dated', '2030-06-04T09:00:00Z'), post('undated', null)]), { workspaceId: 'w', now: NOW })
+    const diff = diffBoard(p, [frame('a', link('dated', { dayKey: '' }), ''), frame('b', link('undated'), '2030-06-03')])
+    expect(diff.moves.map((m) => [m.post.postId, m.post.dayKey])).toEqual([
+      ['dated', '2030-06-04'],
+      ['undated', ''],
+    ])
+    expect(diff.issues.get('a')).toEqual(['Moved from Unscheduled'])
+    expect(diff.issues.get('b')).toEqual(['Moved from Mon, Jun 3'])
+  })
+
+  it("keeps a now text-only post's frames where they are", () => {
+    const { plan: p } = planBoard(
+      campaign([post('t', '2030-06-05T09:00:00Z', { post_type: 'text-post', media: rule('text-post', { allowed_kinds: [], min_attachments: 0, max_attachments: 0 }) })]),
+      { workspaceId: 'w', now: NOW },
+    )
+    const diff = diffBoard(p, [frame('t1', link('t'))])
+    expect(diff.moves).toEqual([])
+    expect(diff.issues.get('t1')).toEqual(['Now a text-only post'])
   })
 
   it('reports an unchanged board as up to date', () => {
@@ -304,10 +328,10 @@ describe('stored state', () => {
 
   it('turns send status and issues into chips', () => {
     expect(noteChips({ sent: '', issues: [] })).toEqual([])
-    expect(noteChips({ sent: '✓ Sent Oct 8, 14:05', issues: ['Deleted in Ogen', 'Moved to Fri, Jun 7'] })).toEqual([
+    expect(noteChips({ sent: '✓ Sent Oct 8, 14:05', issues: ['Deleted in Ogen', 'Moved from Fri, Jun 7'] })).toEqual([
       { text: '✓ Sent Oct 8, 14:05', tone: 'success' },
       { text: '⚠ Deleted in Ogen', tone: 'danger' },
-      { text: '⚠ Moved to Fri, Jun 7', tone: 'danger' },
+      { text: 'Moved from Fri, Jun 7', tone: 'muted' },
     ])
   })
 })
