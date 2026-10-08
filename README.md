@@ -270,7 +270,7 @@ a plain run on a board page opens Boards.
   its post without a picker. Frames for several posts go in one send; a
   post's frames go in reading order (carousel slide order). Other selected
   frames go wherever the picker says. Frames that reached their post get
-  "Sent to Ogen ✓ …" in their note.
+  a "✓ Sent …" chip under the frame.
 
 ### Error handling
 
