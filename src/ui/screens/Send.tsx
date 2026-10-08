@@ -106,7 +106,10 @@ export function SendScreen({ bridge, api, store, me, onSend }: SendScreenProps) 
   // An item's post: its board link, else the picked post.
   const linked = linkedTargets(links.groups)
   const rulesFor = (item: { id: string }) => (linked[item.id] ?? target)?.video
-  const fits = (item: (typeof items)[number]) => (video ? isVideoExportable(item) && rulesFor(item) !== null : !pixelWarning(item, prefs.scale, limits))
+  // A placeholder still holding only its image from Ogen has nothing new for
+  // its post; sending it would attach the same image again.
+  const fits = (item: (typeof items)[number]) =>
+    !(useLinks && item.seededUnchanged) && (video ? isVideoExportable(item) && rulesFor(item) !== null : !pixelWarning(item, prefs.scale, limits))
 
   const oversized = video ? 0 : items.filter((i) => pixelWarning(i, prefs.scale, limits)).length
   const notAnimated = video ? items.length - animatedCount : 0
@@ -154,6 +157,7 @@ export function SendScreen({ bridge, api, store, me, onSend }: SendScreenProps) 
           scale={prefs.scale}
           limits={limits}
           video={video ? { scale: prefs.videoScale, rulesFor } : null}
+          heldBack={useLinks}
           onSelectNode={(nodeId) => bridge.send({ type: 'select', nodeId })}
         />
       </section>

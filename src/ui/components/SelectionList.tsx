@@ -12,10 +12,13 @@ export interface SelectionListProps {
   // Set while sending as video: the video scale and each item's target post
   // rules.
   video: { scale: VideoScale; rulesFor: (item: SelectionItem) => VideoRules | null | undefined } | null
+  // Board links are in use: placeholders still holding only their image
+  // from Ogen are held back (CON-357).
+  heldBack?: boolean
   onSelectNode: (nodeId: string) => void
 }
 
-export function SelectionList({ items, skipped, thumbnails, scale, limits, video, onSelectNode }: SelectionListProps) {
+export function SelectionList({ items, skipped, thumbnails, scale, limits, video, heldBack = false, onSelectNode }: SelectionListProps) {
   if (items.length === 0) {
     return (
       <div class="empty">
@@ -39,8 +42,9 @@ export function SelectionList({ items, skipped, thumbnails, scale, limits, video
               : []
             : [pixelWarning(item, scale, limits)].filter((w): w is string => w !== null)
           const thumb = thumbnails[item.id]
+          const unchanged = heldBack && item.seededUnchanged
           return (
-            <li key={item.id} class={video && !exportable ? 'item dimmed' : 'item'}>
+            <li key={item.id} class={(video && !exportable) || unchanged ? 'item dimmed' : 'item'}>
               <div class="thumb">{thumb ? <img src={thumb} alt="" /> : null}</div>
               <div class="item-body">
                 <div class="item-name" title={item.name}>
@@ -62,6 +66,7 @@ export function SelectionList({ items, skipped, thumbnails, scale, limits, video
                     </button>
                   </div>
                 )}
+                {unchanged && <div class="muted small">Unchanged image from Ogen: already on its post, won't be sent again.</div>}
                 {warnings.map((w) => (
                   <div key={w} class="warning">
                     {w}

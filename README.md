@@ -235,10 +235,24 @@ a plain run on a board page opens Boards.
   sends canvases (CON-351), stories, reels and shorts default to 1080×1920,
   videos to 1920×1080 and the rest to 1080×1080, marked "(default size)".
 - **Frames sit directly on the page**, not in sections or auto layout:
-  Figma exports video only from such frames. The week and day structure is
-  drawn around them as locked shapes and text, and a note above each frame
-  says what it is for. Nothing of the plugin's is inside a frame, so exports
-  contain only the design.
+  Figma exports video only from such frames. Figma shows each one's name
+  (the post title) above it, so the plugin's note sits **under** the frame:
+  one truncated line (platform, type, time, size) and status chips (sent,
+  media from Ogen, the last sync's issues). The week and day structure is
+  drawn around the frames as locked shapes and text: white rows with a
+  border (they must stand out from Figma's default `#F5F5F5` canvas), a
+  header band, a line left of each day, a weekend tint and a bar over
+  today. Nothing of the plugin's is inside a frame, so exports contain only
+  the design.
+- **Media from Ogen** (CON-357, needs `media[]` from CON-356): images
+  already on a post are placed in its placeholders, in order (a carousel
+  gets a slide per image, up to its cap; a video post gets its poster). The
+  UI downloads each Figma-ready copy from its presigned URL and main sets it
+  as the frame's image fill, one at a time, with progress. Sync does the
+  same for new posts and for placeholders nobody has touched. A frame that
+  still holds only its image from Ogen isn't sent again: that image is
+  already on the post. The storage bucket's CORS rules must allow `GET`
+  from the plugin's `null` origin.
 - **Stored state** (`src/shared/board.ts`): each frame carries its post in
   plugin data (`ogen`), which duplicating copies: a duplicated slide joins
   its carousel. The page carries the board meta and grid (`ogen.board`). A

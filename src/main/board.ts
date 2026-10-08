@@ -27,6 +27,7 @@ import {
   type GridTag,
   type PlannedPost,
   type PlannedWeek,
+  type SeedTarget,
 } from '../shared/board'
 import type { BoardInfo, BoardSyncResult } from '../shared/messages'
 
@@ -160,7 +161,7 @@ export async function openBoard(pageId: string, nodeIds: string[] = []): Promise
 
 // ── Building ────────────────────────────────────────────────────────────────
 
-export async function createBoard(plan: BoardPlan): Promise<{ pageId: string; placeholders: number }> {
+export async function createBoard(plan: BoardPlan): Promise<{ pageId: string; placeholders: number; frames: SeedTarget[] }> {
   const f = await loadFonts()
   const page = figma.createPage()
   page.name = `🗓 ${plan.title}`
@@ -170,7 +171,7 @@ export async function createBoard(plan: BoardPlan): Promise<{ pageId: string; pl
   drawHeader(page, plan, f)
 
   let y = LAYOUT.header
-  let placeholders = 0
+  const frames: SeedTarget[] = []
   for (const week of plan.weeks) {
     const row: GridRow = { key: week.key, y, height: 0 }
     // A row fits its tallest day; a week with no posts stays short.
@@ -180,7 +181,7 @@ export async function createBoard(plan: BoardPlan): Promise<{ pageId: string; pl
       const posts = plan.posts.filter((p) => p.slots.length > 0 && p.dayKey && mondayOf(p.dayKey) === week.key && dayIndex(p.dayKey) === day)
       if (posts.length === 0) continue
       const placed = placeStack(posts, columnX(grid, day), rowContentTop(row))
-      placeholders += drawPlacements(page, plan, posts, placed.placements, f)
+      frames.push(...drawPlacements(page, plan, posts, placed.placements, f))
       bottom = posted ? Math.max(bottom, placed.bottom) : placed.bottom
       posted = true
     }
@@ -194,7 +195,7 @@ export async function createBoard(plan: BoardPlan): Promise<{ pageId: string; pl
   if (unscheduled.length > 0) {
     const row: GridRow = { key: '', y, height: 0 }
     const placed = placeFlow(unscheduled, columnX(grid, 0), rowContentTop(row), 7 * grid.columnWidth)
-    placeholders += drawPlacements(page, plan, unscheduled, placed.placements, f)
+    frames.push(...drawPlacements(page, plan, unscheduled, placed.placements, f))
     row.height = placed.bottom - y + LAYOUT.padding
     grid.rows.push(row)
     drawRow(page, grid, row, null, f)
@@ -203,11 +204,12 @@ export async function createBoard(plan: BoardPlan): Promise<{ pageId: string; pl
 
   writeMeta(page, { v: BOARD_SCHEMA, campaignId: plan.campaignId, workspaceId: plan.workspaceId, pageId: page.id, createdAt: plan.syncedAt, lastSyncedAt: plan.syncedAt, grid })
   await openBoard(page.id)
-  return { pageId: page.id, placeholders }
+  return { pageId: page.id, placeholders: frames.length, frames }
 }
 
-function drawPlacements(page: PageNode, plan: BoardPlan, posts: PlannedPost[], placements: ReturnType<typeof placeStack>['placements'], f: Fonts): number {
+function drawPlacements(page: PageNode, plan: BoardPlan, posts: PlannedPost[], placements: ReturnType<typeof placeStack>['placements'], f: Fonts): SeedTarget[] {
   const byId = new Map(posts.map((p) => [p.postId, p]))
+  const made: SeedTarget[] = []
   for (const { slot, x, y } of placements) {
     const post = byId.get(slot.postId)!
     const frame = figma.createFrame()
@@ -234,8 +236,9 @@ function drawPlacements(page: PageNode, plan: BoardPlan, posts: PlannedPost[], p
     writeLink(frame, link)
     frame.setRelaunchData({ send: 'Send this frame to its Ogen post' })
     drawNote(page, frame, link, f)
+    made.push({ nodeId: frame.id, postId: slot.postId, slot: slot.slot })
   }
-  return placements.length
+  return made
 }
 
 function drawHeader(page: PageNode, plan: HeaderText, f: Fonts, banner = '') {
@@ -438,12 +441,14 @@ export async function syncBoard(pageId: string, plan: BoardPlan): Promise<BoardS
   restyleRows(page, grid)
 
   const notes = notesByFrame(page)
+  const seedable: SeedTarget[] = []
   for (const { node, link } of frames) {
     const post = planned.get(link.postId)
     const slot = post?.slots.find((s) => s.slot === link.slot) ?? post?.slots[0]
     // Generated names follow the plan; a name the designer changed stays.
     if (slot && node.name !== slot.name && (node.name === slot.legacyName || node.name === link.name)) node.name = slot.name
     if (isUntouched(node, LEGACY_PLACEHOLDER)) node.fills = [{ type: 'SOLID', color: COLORS.placeholder }]
+    if (!link.seed && isUntouched(node, COLORS.placeholder)) seedable.push({ nodeId: node.id, postId: link.postId, slot: link.slot })
     const next: FrameLink = { ...link, issues: diff.issues.get(node.id) ?? [], note: slot?.note ?? link.note, name: slot?.name ?? link.name }
     writeLink(node, next)
     drawNote(page, node, next, f, notes.get(node.id))
@@ -452,14 +457,20 @@ export async function syncBoard(pageId: string, plan: BoardPlan): Promise<BoardS
   // Notes whose frame was deleted.
   for (const note of notes.values()) note.remove()
 
-  const added: string[] = []
+  const added: SeedTarget[] = []
   for (const post of diff.add) added.push(...addPost(page, grid, plan, post, f))
 
   markToday(page, grid, plan.todayKey)
   drawHeader(page, plan, f)
   writeMeta(page, { ...meta, lastSyncedAt: plan.syncedAt, grid })
   const changed = existing.filter((e) => (diff.issues.get(e.nodeId) ?? []).length > 0).map((e) => e.nodeId)
-  return { summary: syncSummary(diff.counts), counts: diff.counts, nodeIds: [...added, ...changed], lastSyncedAt: plan.syncedAt }
+  return {
+    summary: syncSummary(diff.counts),
+    counts: diff.counts,
+    nodeIds: [...added.map((a) => a.nodeId), ...changed],
+    lastSyncedAt: plan.syncedAt,
+    seedable: [...seedable, ...added],
+  }
 }
 
 // markGone records on the board that its campaign was deleted in Ogen.
@@ -470,7 +481,7 @@ export async function markGone(pageId: string, plan: HeaderText, banner: string)
 
 // addPost places a post's slots at the bottom of its day (or the unscheduled
 // row), growing the row when it runs out of room.
-function addPost(page: PageNode, grid: Grid, plan: BoardPlan, post: PlannedPost, f: Fonts): string[] {
+function addPost(page: PageNode, grid: Grid, plan: BoardPlan, post: PlannedPost, f: Fonts): SeedTarget[] {
   const key = post.dayKey ? mondayOf(post.dayKey) : ''
   let row = grid.rows.find((r) => r.key === key)
   if (!row) row = key ? insertRow(page, grid, plan.weeks.find((w) => w.key === key) ?? fallbackWeek(key), f) : insertRow(page, grid, null, f)
@@ -493,9 +504,7 @@ function addPost(page: PageNode, grid: Grid, plan: BoardPlan, post: PlannedPost,
   const overflow = placements.bottom + LAYOUT.padding - (row.y + row.height)
   if (overflow > 0) growRow(page, grid, row, overflow)
 
-  const before = new Set(page.children.map((c) => c.id))
-  drawPlacements(page, plan, [post], placements.placements, f)
-  return page.children.filter((c) => !before.has(c.id) && c.type === 'FRAME').map((c) => c.id)
+  return drawPlacements(page, plan, [post], placements.placements, f)
 }
 
 // insertRow adds a week (or the unscheduled row) in date order, moving
@@ -562,6 +571,35 @@ function relabelWeeks(page: PageNode, plan: BoardPlan) {
 
 function fallbackWeek(key: string): PlannedWeek {
   return { key, label: key, days: Array.from({ length: 7 }, () => '') }
+}
+
+// ── Media from Ogen ─────────────────────────────────────────────────────────
+
+// setImage fills a placeholder with an image from Ogen and records it, so a
+// send can tell the frame still holds only that image.
+export async function setImage(nodeId: string, attachmentId: string, kind: 'image' | 'video', cropped: boolean, bytes: Uint8Array): Promise<void> {
+  const frame = await figma.getNodeByIdAsync(nodeId)
+  if (!frame || frame.removed || frame.type !== 'FRAME') throw new Error('The placeholder no longer exists.')
+  const link = parseLink(frame.getPluginData(DATA_KEYS.link))
+  const page = pageOf(frame)
+  if (!link || !page) throw new Error('The frame is not a board placeholder.')
+  // Only a placeholder still as the plugin made it: never replace a design.
+  if (!isUntouched(frame, COLORS.placeholder)) throw new Error('The placeholder was changed in the meantime.')
+  const image = figma.createImage(bytes)
+  frame.fills = [{ type: 'IMAGE', imageHash: image.hash, scaleMode: 'FILL' }]
+  const next: FrameLink = { ...link, seed: { attachmentId, kind, imageHash: image.hash, cropped } }
+  writeLink(frame, next)
+  drawNote(page, frame, next, await loadFonts(), notesByFrame(page).get(frame.id))
+}
+
+// seededUnchanged reports whether a frame holds nothing but the image the
+// plugin placed from Ogen: that image is already on the post.
+export function seededUnchanged(node: SceneNode, link: FrameLink): boolean {
+  if (!link.seed || node.type !== 'FRAME' || node.children.length > 0) return false
+  const fills = node.fills
+  if (!Array.isArray(fills) || fills.length !== 1) return false
+  const fill = (fills as readonly Paint[])[0]!
+  return fill.type === 'IMAGE' && fill.imageHash === link.seed.imageHash
 }
 
 // ── Sending ─────────────────────────────────────────────────────────────────

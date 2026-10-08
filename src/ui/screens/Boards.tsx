@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from 'preact/hooks'
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { listCampaigns, type Campaign } from '../../api/campaigns'
 import { isApiError, type ApiClient } from '../../api/client'
 import { errorMessage } from '../../queue/errors'
+import type { BoardPlan, SeedTarget } from '../../shared/board'
 import type { BoardInfo } from '../../shared/messages'
 import type { Bridge } from '../bridge'
 import { planBoard, type PlanStats } from '../boardPlan'
+import { fetchBytes, runSeeds, seedJobs, seedSummary, type SeedOutcome } from '../boardSeed'
 import { fetchCampaign } from '../boardSync'
 import { campaignStatus, dateRange, relativeTime } from '../campaignTree'
 import { TALL_HEIGHT } from './Send'
@@ -36,6 +38,9 @@ export function BoardsScreen({ bridge, api, workspaceId, current }: BoardsScreen
   const [reloads, setReloads] = useState(0)
   const [preview, setPreview] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  // Placing media from Ogen: the campaign row it shows on, and how far it is.
+  const [seeding, setSeeding] = useState<{ key: string; done: number; total: number } | null>(null)
+  const seedAbort = useRef<AbortController | null>(null)
   const [results, setResults] = useState<Record<string, RowResult>>({})
   const [now, setNow] = useState(Date.now())
 
@@ -93,6 +98,31 @@ export function BoardsScreen({ bridge, api, workspaceId, current }: BoardsScreen
     })
   }
 
+  // placeMedia fills new and untouched placeholders with their media from
+  // Ogen, showing progress on the campaign's row.
+  async function placeMedia(key: string, plan: BoardPlan, targets: SeedTarget[]): Promise<SeedOutcome | null> {
+    const jobs = seedJobs(plan, targets)
+    if (jobs.length === 0) return null
+    const ctrl = new AbortController()
+    seedAbort.current = ctrl
+    try {
+      return await runSeeds(
+        jobs,
+        {
+          fetchBytes,
+          setImage: async (job, bytes) => {
+            await bridge.call('boardSetImage', { nodeId: job.nodeId, attachmentId: job.seed.attachmentId, kind: job.seed.kind, cropped: job.seed.cropped, bytes })
+          },
+        },
+        (done, total) => setSeeding({ key, done, total }),
+        ctrl.signal,
+      )
+    } finally {
+      setSeeding(null)
+      seedAbort.current = null
+    }
+  }
+
   async function sync(board: BoardInfo, name: string) {
     setBusy(board.pageId)
     setResult(board.campaignId, null)
@@ -108,6 +138,15 @@ export function BoardsScreen({ bridge, api, workspaceId, current }: BoardsScreen
         const res = await bridge.call('boardSync', { pageId: board.pageId, plan })
         const partial = got.complete ? '' : ' Deleted posts were not checked: the campaign has too many posts.'
         setResult(board.campaignId, { tone: 'success', text: `${res.summary}.${partial}`, nodeIds: res.nodeIds, pageId: board.pageId })
+        const media = await placeMedia(board.campaignId, plan, res.seedable)
+        if (media) {
+          setResult(board.campaignId, {
+            tone: media.failed.length > 0 ? 'warning' : 'success',
+            text: `${res.summary}.${partial} ${seedSummary(media)}`,
+            nodeIds: media.failed.length > 0 ? media.failed : res.nodeIds,
+            pageId: board.pageId,
+          })
+        }
         await loadBoards()
       }
     } catch (err) {
@@ -127,8 +166,18 @@ export function BoardsScreen({ bridge, api, workspaceId, current }: BoardsScreen
       const { plan } = planBoard(full, { workspaceId, complete: got.kind === 'found' && got.complete })
       const res = await bridge.call('boardCreate', { plan })
       setPreview(null)
-      setResult(campaign.id, { tone: 'success', text: `Board created with ${plural(res.placeholders, 'placeholder')}.` })
+      const created = `Board created with ${plural(res.placeholders, 'placeholder')}.`
+      setResult(campaign.id, { tone: 'success', text: created })
+      // The board's row moves to "In this file"; progress shows there.
       await loadBoards()
+      const media = await placeMedia(campaign.id, plan, res.frames)
+      if (media) {
+        setResult(campaign.id, {
+          tone: media.failed.length > 0 ? 'warning' : 'success',
+          text: `${created} ${seedSummary(media)}`,
+          ...(media.failed.length > 0 ? { nodeIds: media.failed, pageId: res.pageId } : {}),
+        })
+      }
     } catch (err) {
       if (isApiError(err) && err.status === 401) return
       setResult(campaign.id, { tone: 'danger', text: `Could not create the board: ${errorMessage(err)}` })
@@ -189,6 +238,7 @@ export function BoardsScreen({ bridge, api, workspaceId, current }: BoardsScreen
                     →
                   </button>
                 </div>
+                {seeding?.key === board.campaignId && <SeedProgress {...seeding} onCancel={() => seedAbort.current?.abort()} />}
                 {otherWorkspace && <p class="warning small">This board belongs to another Ogen workspace.</p>}
                 {result && <ResultLine result={result} bridge={bridge} />}
               </div>
@@ -236,6 +286,22 @@ export function BoardsScreen({ bridge, api, workspaceId, current }: BoardsScreen
   )
 }
 
+function SeedProgress({ done, total, onCancel }: { done: number; total: number; onCancel: () => void }) {
+  return (
+    <div class="seed-progress">
+      <span class="muted small">
+        Placing images from Ogen · {done} of {total}
+      </span>
+      <div class="progress" role="progressbar" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+        <div class="progress-bar" style={{ width: `${(done / Math.max(total, 1)) * 100}%` }} />
+      </div>
+      <button class="small-button align-end" onClick={onCancel}>
+        Cancel
+      </button>
+    </div>
+  )
+}
+
 function Preview({ stats }: { stats: PlanStats }) {
   return (
     <ul class="preview small">
@@ -243,6 +309,16 @@ function Preview({ stats }: { stats: PlanStats }) {
         {plural(stats.weeks, 'week')} · {plural(stats.posts, 'post')}
       </li>
       <li>{plural(stats.placeholders, 'placeholder')}</li>
+      {stats.seededImages + stats.seededPosters > 0 && (
+        <li class="info">
+          {[
+            stats.seededImages > 0 ? `${stats.seededImages} with images from Ogen` : '',
+            stats.seededPosters > 0 ? `${stats.seededPosters} with a video poster` : '',
+          ]
+            .filter(Boolean)
+            .join(', ')}
+        </li>
+      )}
       {stats.textOnly > 0 && <li class="muted">{stats.textOnly} text-only (no placeholder)</li>}
       {stats.unscheduled > 0 && <li class="muted">{stats.unscheduled} unscheduled</li>}
       {stats.noType > 0 && <li class="warning">{stats.noType} without a post type (square placeholder)</li>}

@@ -683,3 +683,23 @@ button.small-button {
   margin: 4px 0 0;
   padding-left: 16px;
 }
+
+/* Placing media from Ogen on a board (CON-357). */
+.seed-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.seed-progress .progress {
+  border-radius: 2px;
+}
+
+button.align-end {
+  align-self: flex-end;
+}
+
+.info {
+  color: var(--brand);
+}
