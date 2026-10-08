@@ -25,9 +25,12 @@ export interface PlannedSlot {
   slot: number
   width: number
   height: number
-  // The frame's layer name.
+  // The frame's layer name: the post title, which Figma shows above the frame.
   name: string
-  // The annotation drawn above the frame (one or more lines).
+  // The name CON-354 boards gave the frame, so a sync can rename frames the
+  // designer hasn't renamed.
+  legacyName: string
+  // The one-line note drawn under the frame: platform, type, time, size.
   note: string
 }
 
@@ -67,6 +70,8 @@ export interface BoardPlan {
   syncedLabel: string
   weeks: PlannedWeek[]
   posts: PlannedPost[]
+  // Today in the campaign's zone (YYYY-MM-DD), for the today marker.
+  todayKey: string
   // False when the post list may be cut short (an API cap), so a missing
   // post can't be taken as deleted.
   complete: boolean
@@ -85,8 +90,11 @@ export interface FrameLink {
   dayKey: string
   width: number
   height: number
-  // The planned annotation (PlannedSlot.note), redrawn above the frame.
+  // The planned note (PlannedSlot.note), redrawn under the frame.
   note: string
+  // The name the plugin last gave the frame; a different name is the
+  // designer's and is kept.
+  name: string
   // Lines the last sync flagged ("Deleted in Ogen", …), drawn in the note.
   issues: string[]
   // e.g. "Sent ✓ Oct 8, 14:02"; "" until the frame is sent.
@@ -125,7 +133,13 @@ export type GridTag =
   | { kind: 'row'; key: string }
   | { kind: 'week-label'; key: string }
   | { kind: 'day-label'; key: string; day: number }
-  // The annotation above a placeholder frame.
+  // A week row's header band, the line left of each day, the weekend tint.
+  | { kind: 'band'; key: string }
+  | { kind: 'day-line'; key: string; day: number }
+  | { kind: 'weekend'; key: string }
+  // The bar over today's column.
+  | { kind: 'today' }
+  // The note (and status chips) under a placeholder frame.
   | { kind: 'note'; frameId: string }
 
 export function parseLink(raw: string): FrameLink | null {
@@ -140,6 +154,7 @@ export function parseLink(raw: string): FrameLink | null {
     width: num(o.width, 0),
     height: num(o.height, 0),
     note: str(o.note),
+    name: str(o.name),
     issues: Array.isArray(o.issues) ? o.issues.filter((s): s is string => typeof s === 'string') : [],
     sent: str(o.sent),
   }
@@ -174,9 +189,14 @@ export function parseTag(raw: string): GridTag | null {
       return { kind: 'header' }
     case 'row':
     case 'week-label':
+    case 'band':
+    case 'weekend':
       return { kind: o.kind, key: str(o.key) }
     case 'day-label':
-      return { kind: 'day-label', key: str(o.key), day: num(o.day, 0) }
+    case 'day-line':
+      return { kind: o.kind, key: str(o.key), day: num(o.day, 0) }
+    case 'today':
+      return { kind: 'today' }
     case 'note':
       return typeof o.frameId === 'string' ? { kind: 'note', frameId: o.frameId } : null
     default:
@@ -195,8 +215,14 @@ export const LAYOUT = {
   padding: 120,
   // Day header at the top of each column.
   dayHeader: 180,
-  // Room above each frame for its note.
-  noteSpace: 200,
+  // The header band behind the day labels, from the row's top edge.
+  band: 260,
+  // Room above each frame for Figma's own frame-name label.
+  frameTop: 80,
+  // Room under each frame for its note line and status chips.
+  noteBelow: 180,
+  // Content height of a week with no posts.
+  emptyRow: 400,
   // Space between rows (weeks).
   rowGap: 240,
   // Header block above the first row.
@@ -233,13 +259,13 @@ export function placeStack(posts: PlannedPost[], x: number, top: number): { plac
   let y = top
   for (const post of posts) {
     if (post.slots.length === 0) continue
-    y += LAYOUT.noteSpace
+    y += LAYOUT.frameTop
     let sx = x
     for (const slot of post.slots) {
       placements.push({ slot, x: sx, y })
       sx += slot.width + LAYOUT.slideGap
     }
-    y += postHeight(post) + LAYOUT.gap
+    y += postHeight(post) + LAYOUT.noteBelow + LAYOUT.gap
   }
   return { placements, bottom: y }
 }
@@ -261,11 +287,11 @@ export function placeFlow(posts: PlannedPost[], x: number, top: number, width: n
     }
     let sx = cx
     for (const slot of post.slots) {
-      placements.push({ slot, x: sx, y: lineTop + LAYOUT.noteSpace })
+      placements.push({ slot, x: sx, y: lineTop + LAYOUT.frameTop })
       sx += slot.width + LAYOUT.slideGap
     }
     cx += w + LAYOUT.gap
-    lineHeight = Math.max(lineHeight, LAYOUT.noteSpace + postHeight(post) + LAYOUT.gap)
+    lineHeight = Math.max(lineHeight, LAYOUT.frameTop + postHeight(post) + LAYOUT.noteBelow + LAYOUT.gap)
   }
   return { placements, bottom: lineTop + lineHeight }
 }
@@ -407,13 +433,25 @@ export function syncSummary(c: SyncDiff['counts']): string {
   return parts.join(' · ') || 'Up to date'
 }
 
-// noteText is a frame's annotation: the planned note, then its send status
-// and issues. The note is stored on the frame so a sync can redraw it.
-export function noteText(note: string, link: Pick<FrameLink, 'issues' | 'sent'>): { text: string; issueStart: number } {
-  const head = [note, link.sent].filter(Boolean).join('\n')
-  if (link.issues.length === 0) return { text: head, issueStart: -1 }
-  const issueStart = head.length + 1
-  return { text: `${head}\n${link.issues.map((i) => `⚠ ${i}`).join('\n')}`, issueStart }
+export type ChipTone = 'success' | 'info' | 'danger' | 'muted'
+
+export interface Chip {
+  text: string
+  tone: ChipTone
+}
+
+// Issues that are information rather than a problem with the frame.
+const MUTED_ISSUES = new Set<string>()
+
+// noteChips are the status chips under a frame's note: its send status, then
+// the last sync's issues.
+export function noteChips(link: Pick<FrameLink, 'issues' | 'sent'>): Chip[] {
+  const chips: Chip[] = []
+  if (link.sent) chips.push({ text: link.sent, tone: 'success' })
+  for (const issue of link.issues) {
+    chips.push(MUTED_ISSUES.has(issue) ? { text: issue, tone: 'muted' } : { text: `⚠ ${issue}`, tone: 'danger' })
+  }
+  return chips
 }
 
 // readingOrder sorts frames the way a carousel reads: top to bottom by rows,

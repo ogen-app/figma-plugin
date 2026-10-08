@@ -6,9 +6,10 @@ import {
   diffBoard,
   dayIndex,
   mondayOf,
-  noteText,
+  noteChips,
   parseLink,
   parseMeta,
+  parseTag,
   placeFlow,
   placeStack,
   readingOrder,
@@ -112,12 +113,15 @@ describe('planBoard', () => {
     )
     const byId = Object.fromEntries(plan.posts.map((p) => [p.postId, p]))
     expect(byId.img!.slots.map((s) => [s.width, s.height])).toEqual([[1080, 1350]])
-    expect(byId.img!.slots[0]!.note).toBe('Instagram · Image · Mon, Jun 3, 12:00\nimg\n1080×1350 · image')
-    expect(byId.carousel!.slots.map((s) => s.name)).toEqual(['carousel · Instagram Carousel · 1/2', 'carousel · Instagram Carousel · 2/2'])
+    // One line under the frame; the title is the frame's name.
+    expect(byId.img!.slots[0]!.note).toBe('Instagram · Image · 12:00 · 1080×1350')
+    expect(byId.img!.slots[0]!.name).toBe('img')
+    expect(byId.carousel!.slots.map((s) => s.name)).toEqual(['carousel · 1/2', 'carousel · 2/2'])
+    expect(byId.carousel!.slots.map((s) => s.legacyName)).toEqual(['carousel · Instagram Carousel · 1/2', 'carousel · Instagram Carousel · 2/2'])
     expect(byId.text!.slots).toEqual([])
     // No canvas from the server: the format's default, flagged as such.
     expect(byId.story!.slots[0]).toMatchObject({ width: 1080, height: 1920 })
-    expect(byId.story!.slots[0]!.note).toContain('1080×1920 (default size) · image or video')
+    expect(byId.story!.slots[0]!.note).toBe('Instagram · Story · Unscheduled · 1080×1920 (default size)')
     expect(byId.untyped!.slots[0]!.note).toContain('Post type not set')
     expect(stats).toEqual({ weeks: 1, posts: 5, placeholders: 5, textOnly: 1, unscheduled: 2, noType: 1 })
   })
@@ -132,6 +136,7 @@ const link = (postId: string, over: Partial<FrameLink> = {}): FrameLink => ({
   width: 1080,
   height: 1350,
   note: '',
+  name: '',
   issues: [],
   sent: '',
   ...over,
@@ -213,19 +218,20 @@ describe('layout', () => {
   it('stacks posts and puts carousel slides side by side', () => {
     const { placements, bottom } = placeStack(plan.posts, 0, 0)
     expect(placements.map((p) => [p.slot.postId, p.x, p.y])).toEqual([
-      ['a', 0, 200],
-      ['b', 0, 1910],
-      ['b', 1160, 1910],
+      ['a', 0, 80],
+      ['b', 0, 80 + 1350 + 180 + 160 + 80],
+      ['b', 1160, 80 + 1350 + 180 + 160 + 80],
     ])
-    expect(bottom).toBe(1910 + 1080 + 160)
+    // Each post: room for Figma's label, the frame, the note under it, a gap.
+    expect(bottom).toBe(1850 + 1080 + 180 + 160)
   })
 
   it('wraps the unscheduled row', () => {
     const { placements } = placeFlow(plan.posts, 0, 0, 3000)
     expect(placements.map((p) => [p.x, p.y])).toEqual([
-      [0, 200],
-      [0, 200 + 200 + 1350 + 160],
-      [1160, 200 + 200 + 1350 + 160],
+      [0, 80],
+      [0, 80 + 1350 + 180 + 160 + 80],
+      [1160, 80 + 1350 + 180 + 160 + 80],
     ])
   })
 
@@ -252,7 +258,27 @@ describe('layout', () => {
   })
 })
 
+describe('today', () => {
+  it("is today's date in the campaign's zone", () => {
+    // 22:30 UTC is already the next day in Kyiv.
+    const { plan } = planBoard(campaign([]), { workspaceId: 'w', now: new Date('2030-06-09T22:30:00Z') })
+    expect(plan.todayKey).toBe('2030-06-10')
+  })
+})
+
 describe('stored state', () => {
+  it('parses the grid tags', () => {
+    expect(parseTag('{"kind":"band","key":"2030-06-03"}')).toEqual({ kind: 'band', key: '2030-06-03' })
+    expect(parseTag('{"kind":"day-line","key":"2030-06-03","day":5}')).toEqual({ kind: 'day-line', key: '2030-06-03', day: 5 })
+    expect(parseTag('{"kind":"weekend","key":"k"}')).toEqual({ kind: 'weekend', key: 'k' })
+    expect(parseTag('{"kind":"today"}')).toEqual({ kind: 'today' })
+    expect(parseTag('{"kind":"nope"}')).toBeNull()
+  })
+
+  it("keeps the frame's generated name", () => {
+    expect(parseLink(JSON.stringify({ postId: 'p', name: 'Teaser · 1/2' }))?.name).toBe('Teaser · 1/2')
+  })
+
   it('parses links and board meta defensively', () => {
     expect(parseLink('')).toBeNull()
     expect(parseLink('{"postId":""}')).toBeNull()
@@ -262,8 +288,12 @@ describe('stored state', () => {
     expect(meta?.grid.rows).toEqual([{ key: 'k', y: 1, height: 2 }])
   })
 
-  it('appends send status and issues to a note', () => {
-    expect(noteText('A\nB', { sent: '', issues: [] })).toEqual({ text: 'A\nB', issueStart: -1 })
-    expect(noteText('A', { sent: 'Sent ✓', issues: ['Deleted in Ogen'] })).toEqual({ text: 'A\nSent ✓\n⚠ Deleted in Ogen', issueStart: 9 })
+  it('turns send status and issues into chips', () => {
+    expect(noteChips({ sent: '', issues: [] })).toEqual([])
+    expect(noteChips({ sent: '✓ Sent Oct 8, 14:05', issues: ['Deleted in Ogen', 'Moved to Fri, Jun 7'] })).toEqual([
+      { text: '✓ Sent Oct 8, 14:05', tone: 'success' },
+      { text: '⚠ Deleted in Ogen', tone: 'danger' },
+      { text: '⚠ Moved to Fri, Jun 7', tone: 'danger' },
+    ])
   })
 })

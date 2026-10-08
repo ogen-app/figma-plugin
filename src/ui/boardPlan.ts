@@ -78,6 +78,7 @@ export function planBoard(campaign: Campaign, opts: PlanOptions): { plan: BoardP
     syncedLabel: `Last synced ${syncedFmt.format(now)}`,
     weeks,
     posts,
+    todayKey: dayFmt.format(now),
     complete: opts.complete ?? true,
   }
   return { plan, stats }
@@ -96,8 +97,9 @@ function planPost(post: CampaignPost, day: { key: string; at: number } | null, t
   // type still gets one placeholder: better a frame too many than none.
   const textOnly = post.media?.max_attachments === 0
   const count = textOnly ? 0 : Math.max(1, post.media?.min_attachments ?? 1)
-  const kinds = kindHint(post.media?.allowed_kinds ?? [])
-  const when = day ? `${dayLabel}, ${time(day.at)}` : 'Unscheduled'
+  // One line under the frame. The day is the column's; the title is the
+  // frame's name, which Figma already shows above the frame.
+  const note = [platform, typeLabel, day ? time(day.at) : 'Unscheduled', known ? size : `${size} (default size)`].join(' · ')
   const slots: PlannedSlot[] = []
   for (let slot = 0; slot < count; slot++) {
     const of = count > 1 ? ` · ${slot + 1}/${count}` : ''
@@ -106,12 +108,9 @@ function planPost(post: CampaignPost, day: { key: string; at: number } | null, t
       slot,
       width: canvas.width,
       height: canvas.height,
-      name: `${title} · ${platform} ${typeLabel}${of}`,
-      note: [
-        `${platform} · ${typeLabel} · ${when}`,
-        `${title}${of}`,
-        [known ? size : `${size} (default size)`, kinds].filter(Boolean).join(' · '),
-      ].join('\n'),
+      name: `${title}${of}`,
+      legacyName: `${title} · ${platform} ${typeLabel}${of}`,
+      note,
     })
   }
   return {
@@ -161,15 +160,6 @@ export function rangeLabel(from: string, to: string): string {
   if (from.slice(0, 4) !== to.slice(0, 4)) return `${yearFmt.format(utc(from))} – ${yearFmt.format(utc(to))}`
   if (from.slice(0, 7) === to.slice(0, 7)) return `${monthDayFmt.format(utc(from))} – ${Number(to.slice(8))}`
   return `${monthDayFmt.format(utc(from))} – ${monthDayFmt.format(utc(to))}`
-}
-
-function kindHint(kinds: string[]): string {
-  const image = kinds.includes('image')
-  const video = kinds.includes('video')
-  if (image && video) return 'image or video'
-  if (video) return 'video'
-  if (image) return 'image'
-  return ''
 }
 
 function humanize(slug: string): string {
