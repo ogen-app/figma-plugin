@@ -7,6 +7,7 @@ const post = (id: string, scheduled_at: string | null, over: Partial<CampaignPos
   title: id,
   status: 'draft',
   platform: { id: 'li', name: 'LinkedIn' },
+  post_type: 'image-post',
   scheduled_at,
   attachment_count: 0,
   attachable: true,
@@ -54,7 +55,7 @@ describe('postTime', () => {
 
 describe('filterTree', () => {
   const campaigns: Campaign[] = [
-    { id: 'c1', name: 'Q4 Launch', status: 'active', timezone: '', start_date: null, end_date: null, posts: [post('Teaser', null), post('Recap', null)] },
+    { id: 'c1', name: 'Q4 Launch', status: 'active', timezone: '', start_date: null, end_date: null, posts_changed_at: null, posts: [post('Teaser', null), post('Recap', null)] },
     {
       id: 'c2',
       name: 'Webinar',
@@ -62,6 +63,7 @@ describe('filterTree', () => {
       timezone: '',
       start_date: null,
       end_date: null,
+      posts_changed_at: null,
       posts: [post('Launch reminder', null), post('Promo', null, { platform: { id: 'ig', name: 'Instagram' } })],
     },
   ]
@@ -115,9 +117,12 @@ describe('toCampaigns', () => {
         timezone: 'Europe/Kyiv',
         start_date: null,
         end_date: null,
-        posts: [{ id: 'p1', title: 'Teaser', status: 'scheduled', platform: null, scheduled_at: '2030-10-12T06:00:00Z', attachment_count: 0, attachable: false }],
+        posts_changed_at: null,
+        posts: [
+          { id: 'p1', title: 'Teaser', status: 'scheduled', platform: null, post_type: '', scheduled_at: '2030-10-12T06:00:00Z', attachment_count: 0, attachable: false },
+        ],
       },
-      { id: 'c2', name: '', status: '', timezone: '', start_date: null, end_date: null, posts: [] },
+      { id: 'c2', name: '', status: '', timezone: '', start_date: null, end_date: null, posts_changed_at: null, posts: [] },
     ])
     expect(toCampaigns({ campaigns: null })).toEqual([])
   })
