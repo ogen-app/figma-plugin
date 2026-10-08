@@ -16,7 +16,7 @@ export interface LinkedSend {
   unlinked: SelectionItem[]
   // Linked items by post, in the order the posts first appear.
   groups: LinkedGroup[]
-  // Linked to a post that isn't in Ogen's campaign list any more.
+  // Linked to a post its campaign no longer has (or a deleted campaign).
   missing: SelectionItem[]
   // Linked to a post that was submitted and can't take new media.
   locked: SelectionItem[]
@@ -24,10 +24,19 @@ export interface LinkedSend {
   crowded: LinkedGroup[]
 }
 
+// LinkTargets are the posts linked frames can go to, from their campaigns.
+export interface LinkTargets {
+  byId: Map<string, PostTarget>
+  // Campaigns whose full post list was read (or that are gone from Ogen):
+  // a post missing from them is really gone.
+  complete: Set<string>
+}
+
 // resolveLinks splits a selection by the posts its items are linked to.
-// targets maps post ids to posts; null means they are still loading, which
-// leaves every linked item in no group yet.
-export function resolveLinks(items: SelectionItem[], targets: Map<string, PostTarget> | null): LinkedSend {
+// targets null means they are still loading, which leaves every linked item
+// in no group yet. A post that isn't found in a campaign whose list may be
+// cut short is still sent to by id: the server decides.
+export function resolveLinks(items: SelectionItem[], targets: LinkTargets | null): LinkedSend {
   const out: LinkedSend = { unlinked: [], groups: [], missing: [], locked: [], crowded: [] }
   const groups = new Map<string, LinkedGroup>()
   for (const item of items) {
@@ -36,7 +45,7 @@ export function resolveLinks(items: SelectionItem[], targets: Map<string, PostTa
       continue
     }
     if (!targets) continue
-    const target = targets.get(item.link.postId)
+    const target = targets.byId.get(item.link.postId) ?? unlistedTarget(item, targets.complete)
     if (!target) {
       out.missing.push(item)
       continue
@@ -59,6 +68,14 @@ export function resolveLinks(items: SelectionItem[], targets: Map<string, PostTa
     if (typeof max === 'number' && max > 0 && g.items.length > max) out.crowded.push(g)
   }
   return out
+}
+
+// unlistedTarget is the post of a link that its campaign's (possibly cut
+// short) list doesn't show, known only by id.
+function unlistedTarget(item: SelectionItem, complete: Set<string>): PostTarget | null {
+  const link = item.link!
+  if (complete.has(link.campaignId)) return null
+  return { id: link.postId, title: item.name, campaignName: '', platformName: '', detail: 'Not in the campaign list; Ogen checks it on send' }
 }
 
 // linkedTargets maps each grouped item to its post, for SendRequest.linked.

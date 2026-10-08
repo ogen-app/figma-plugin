@@ -64,7 +64,8 @@ export function ResultScreen({ request, statuses, outcome, onBack }: ResultScree
 function destinationLabel(request: SendRequest): string {
   const posts = new Map(request.items.map((item) => [targetOf(request, item)?.id ?? '', targetOf(request, item)]))
   const bank = posts.delete('')
-  if (posts.size > 1 || (posts.size === 1 && bank)) return bank ? `to ${posts.size} posts and the content bank` : `to ${posts.size} posts`
+  const n = posts.size === 1 ? '1 post' : `${posts.size} posts`
+  if (posts.size > 1 || (posts.size === 1 && bank)) return bank ? `to ${n} and the content bank` : `to ${n}`
   const post = [...posts.values()][0]
   if (!post) return 'to the content bank'
   return `to “${post.title || 'Untitled post'}”${post.campaignName ? ` in ${post.campaignName}` : ''}`
