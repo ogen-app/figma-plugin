@@ -52,6 +52,31 @@ every update after that. The first listing is tracked in
         -H 'Access-Control-Request-Headers: content-type' | grep -i access-control
       ```
       Expect `Access-Control-Allow-Origin: *`.
+- [ ] **Storage bucket allows the plugin.** The plugin uploads videos to
+      the production R2 bucket and downloads post media from it for
+      campaign boards, through presigned URLs, from origin `null`. The
+      bucket's CORS policy (Cloudflare → R2 → the bucket → Settings → CORS
+      policy) needs this rule **next to** the web app's rule, so keep that
+      one:
+      ```json
+      {
+        "AllowedOrigins": ["*"],
+        "AllowedMethods": ["PUT", "GET"],
+        "AllowedHeaders": ["content-type"],
+        "MaxAgeSeconds": 3600
+      }
+      ```
+      `*` is safe here: a presigned URL is already the credential, and no
+      cookies are involved. Without `GET`, board media fails with "No
+      'Access-Control-Allow-Origin' header" in the plugin console. Without
+      `PUT`, video sends fail with "Could not reach Ogen storage". Check it
+      (no signed URL needed):
+      ```sh
+      curl -si -X OPTIONS 'https://<account>.r2.cloudflarestorage.com/<prod bucket>/cors-check' \
+        -H 'Origin: null' -H 'Access-Control-Request-Method: GET' | grep -i access-control
+      ```
+      Expect `Access-Control-Allow-Origin: *` and
+      `Access-Control-Allow-Methods` listing `PUT, GET`.
 - [ ] **Approval page is in production.** CON-339 is deployed, and the API's
       `APP_BASE_URL` points at it, so `approve_url` opens
       `https://app.getogen.com/integrations/figma/connect?key=…`.
@@ -135,6 +160,11 @@ the manifest. Figma ignores it for published plugins.
    - [ ] **JPG and 3×:** export works, and the size shown matches the asset.
    - [ ] **Too large:** a frame over 100 MP at the chosen scale is flagged
          and skipped.
+   - [ ] **Video:** send an animated frame as MP4 to a post that takes
+         video. It's attached, which also proves the bucket allows `PUT`.
+   - [ ] **Board media:** create a board for a campaign whose posts have
+         images. They appear in the placeholders with "Image from Ogen",
+         which also proves the bucket allows `GET`.
    - [ ] **Disconnect:** the menu → Disconnect returns to Connect, and the
          connection disappears from Ogen settings.
    - [ ] **Revoke from Ogen:** reconnect, revoke the connection in Ogen
@@ -238,7 +268,7 @@ Keep the copy and artwork in version control, for example under
 | Thumbnail | 1920 × 1080 px |
 | Carousel | Up to 9 images or videos: Connect, Send screen, campaign tree, Result |
 | Support contact | A shared support address or URL, not a personal one |
-| Network access | Shown automatically from `allowedDomains` (`api.getogen.com`) |
+| Network access | Shown automatically from `allowedDomains` (`api.getogen.com`, `*.r2.cloudflarestorage.com`) |
 | Contributors | Ogen maintainers who may publish updates |
 | Playground file | Optional: a sample file with a few frames to try |
 
@@ -249,8 +279,10 @@ Facts for the security disclosure form:
 - **Data sent:** the PNG/JPG render of the selected frames, the frame name
   and node id, and the Figma file name. Nothing else from the document is
   read or sent.
-- **Where it goes:** only the Ogen API (`api.getogen.com`). The plugin has
-  no third-party services and no analytics.
+- **Where it goes:** only Ogen: the Ogen API (`api.getogen.com`) and Ogen's
+  storage (`*.r2.cloudflarestorage.com`), which videos are uploaded to and
+  board media is downloaded from, through short-lived presigned URLs the
+  API issues. The plugin has no third-party services and no analytics.
 - **Authentication:** a one-time pairing in the browser gives the plugin a
   revocable token, scoped to one Ogen workspace. The token can only upload
   images and list campaign and post titles (never post text).
