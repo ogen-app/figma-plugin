@@ -262,10 +262,13 @@ a plain run on a board page opens Boards.
   CON-352; until it exists, the campaign list, whose post list may be cut
   short, so deletions are then not checked) and diffs it with the frames
   (`diffBoard`). It adds placeholders for new posts, growing a row (and
-  moving the rows below down as a whole) when a day runs out of room, and
-  flags frames in their notes: deleted, moved to another day, a new canvas,
-  or a post that can't take media any more. It never moves or deletes a
-  designer's frame. A frame dragged into the right day stops being "moved".
+  moving the rows below down as a whole) when a day runs out of room. A
+  rescheduled post's frames, designed or not, move to the bottom of its new
+  day (or the unscheduled row), keeping their arrangement, and show "Moved
+  from …" until the next sync. Other changes are flagged in the notes:
+  deleted, a new canvas, or a post that can't take media any more. A deleted
+  post's frames are never removed. A frame already dragged into the right
+  day doesn't move.
 - **Sending**: a selected frame that is (or sits in) a placeholder goes to
   its post without a picker. Frames for several posts go in one send; a
   post's frames go in reading order (carousel slide order). Other selected
