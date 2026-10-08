@@ -505,6 +505,13 @@ export function noteChips(link: Pick<FrameLink, 'issues' | 'sent' | 'seed'>): Ch
   return chips
 }
 
+// sameColor compares colours the way Figma keeps them: as 32-bit floats, so
+// a channel written as 236/255 reads back slightly different.
+export function sameColor(a: { r: number; g: number; b: number }, b: { r: number; g: number; b: number }): boolean {
+  const near = (x: number, y: number) => Math.abs(x - y) < 1 / 1024
+  return near(a.r, b.r) && near(a.g, b.g) && near(a.b, b.b)
+}
+
 // readingOrder sorts frames the way a carousel reads: top to bottom by rows,
 // left to right within a row.
 export function readingOrder<T extends { x: number; y: number; height: number }>(a: T, b: T): number {

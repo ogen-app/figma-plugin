@@ -16,6 +16,7 @@ import {
   placeFlow,
   placeStack,
   rowContentTop,
+  sameColor,
   syncSummary,
   type BoardMeta,
   type BoardPlan,
@@ -548,7 +549,7 @@ function restyleRows(page: PageNode, grid: Grid) {
 function isUntouched(frame: FrameNode, color: RGB): boolean {
   if (frame.children.length > 0 || !Array.isArray(frame.fills) || frame.fills.length !== 1) return false
   const fill = (frame.fills as readonly Paint[])[0]!
-  return fill.type === 'SOLID' && fill.color.r === color.r && fill.color.g === color.g && fill.color.b === color.b
+  return fill.type === 'SOLID' && sameColor(fill.color, color)
 }
 
 // shiftBelow moves every node on the page that starts at or below y, and the
