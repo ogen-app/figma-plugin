@@ -6,8 +6,11 @@ import { DEFAULT_LIMITS, type Me } from '../api/types'
 import { runSendQueue, type ItemStatus, type QueueOutcome } from '../queue/sendQueue'
 import { headline, summarize } from '../queue/summary'
 import type { SendRequest } from '../queue/types'
+import type { LaunchCommand } from '../shared/messages'
 import { sleep } from '../queue/sleep'
 import type { Bridge } from './bridge'
+import { Header, type Tab } from './components/Header'
+import { BoardsScreen } from './screens/Boards'
 import { ConnectScreen } from './screens/Connect'
 import { SendScreen } from './screens/Send'
 import { ResultScreen } from './screens/Result'
@@ -19,6 +22,9 @@ export const DISCONNECTED_NOTICE = 'Disconnected from Ogen.'
 export interface DocInfo {
   userName: string | null
   fileName: string
+  command: LaunchCommand
+  // The current page's board when the plugin opened on one.
+  board: { campaignId: string; copy: boolean } | null
 }
 
 type View =
@@ -36,7 +42,8 @@ type View =
 
 export function App({ bridge }: { bridge: Bridge }) {
   const [view, setView] = useState<View>({ name: 'loading' })
-  const [doc, setDoc] = useState<DocInfo>({ userName: null, fileName: '' })
+  const [doc, setDoc] = useState<DocInfo>({ userName: null, fileName: '', command: '', board: null })
+  const [tab, setTab] = useState<Tab>('send')
   const sendAbort = useRef<AbortController | null>(null)
 
   const services = useMemo(() => {
@@ -58,7 +65,10 @@ export function App({ bridge }: { bridge: Bridge }) {
 
   useEffect(() => {
     const unsubscribe = bridge.subscribe((msg) => {
-      if (msg.type === 'init') setDoc({ userName: msg.userName, fileName: msg.fileName })
+      if (msg.type === 'init') {
+        setDoc({ userName: msg.userName, fileName: msg.fileName, command: msg.command, board: msg.board })
+        setTab(launchTab(msg.command, msg.board !== null))
+      }
     })
     bridge.send({ type: 'ready' })
     void restoreSession()
@@ -139,8 +149,23 @@ export function App({ bridge }: { bridge: Bridge }) {
       if (v.name !== 'sending' || v.request !== request) return v
       const summary = summarize(v.statuses)
       bridge.send({ type: 'notify', message: headline(summary), error: summary.sent === 0 })
+      markBoardFrames(request, v.statuses)
       return { ...v, outcome }
     })
+  }
+
+  // markBoardFrames notes on the board which placeholders reached their post.
+  function markBoardFrames(request: SendRequest, statuses: ItemStatus[]) {
+    if (!request.linked) return
+    const nodeIds = request.items
+      .filter((item, i) => {
+        const st = statuses[i]
+        return request.linked?.[item.id] && st?.state === 'sent' && !st.attachMessage
+      })
+      .map((item) => item.id)
+    if (nodeIds.length === 0) return
+    const label = `Sent to Ogen ✓ ${sentFmt.format(new Date())}`
+    bridge.call('markSent', { nodeIds, label }).catch(() => undefined)
   }
 
   function backToSend() {
@@ -154,15 +179,20 @@ export function App({ bridge }: { bridge: Bridge }) {
       return <ConnectScreen notice={view.notice} doc={doc} api={services.api} onConnected={connected} />
     case 'send':
       return (
-        <SendScreen
-          bridge={bridge}
-          api={services.api}
-          store={services.store}
-          session={view.session}
-          me={view.me}
-          onDisconnect={disconnect}
-          onSend={send}
-        />
+        <main class="screen send">
+          <Header
+            workspaceName={view.me?.workspace.name || view.session.workspace.name}
+            userName={view.session.user.name}
+            tab={tab}
+            onTab={setTab}
+            onDisconnect={disconnect}
+          />
+          {tab === 'send' ? (
+            <SendScreen bridge={bridge} api={services.api} store={services.store} me={view.me} onSend={send} />
+          ) : (
+            <BoardsScreen bridge={bridge} api={services.api} workspaceId={view.me?.workspace.id || view.session.workspace.id} current={doc.board} />
+          )}
+        </main>
       )
     case 'sending':
       return view.outcome ? (
@@ -171,4 +201,13 @@ export function App({ bridge }: { bridge: Bridge }) {
         <SendingScreen request={view.request} statuses={view.statuses} onCancel={() => sendAbort.current?.abort()} />
       )
   }
+}
+
+const sentFmt = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+
+// launchTab picks the tab for how the plugin was opened: a menu command or
+// relaunch button names it; otherwise a board page opens on Boards.
+export function launchTab(command: LaunchCommand, onBoard: boolean): Tab {
+  if (command) return command
+  return onBoard ? 'boards' : 'send'
 }

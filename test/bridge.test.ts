@@ -32,9 +32,9 @@ describe('bridge', () => {
     const { bridge, deliver } = harness()
     const got: MainToUi[] = []
     const unsubscribe = bridge.subscribe((m) => got.push(m))
-    deliver({ type: 'init', userName: 'Jane', fileName: 'Brand' })
+    deliver({ type: 'init', userName: 'Jane', fileName: 'Brand', command: '', board: null })
     unsubscribe()
-    deliver({ type: 'init', userName: null, fileName: 'x' })
-    expect(got).toEqual([{ type: 'init', userName: 'Jane', fileName: 'Brand' }])
+    deliver({ type: 'init', userName: null, fileName: 'x', command: '', board: null })
+    expect(got).toEqual([{ type: 'init', userName: 'Jane', fileName: 'Brand', command: '', board: null }])
   })
 })

@@ -1,3 +1,5 @@
+import type { BoardPlan } from './board'
+
 // The protocol between the main sandbox (figma.* API, no network) and the UI
 // iframe (network, no figma.* API). The UI drives: it calls main through
 // request/response RPCs, and main pushes document events to it.
@@ -23,6 +25,12 @@ export interface SelectionItem {
   type: ExportableType
   width: number
   height: number
+  // Position on the page, for ordering a carousel's slides.
+  x: number
+  y: number
+  // The post a board placeholder (the item or the frame it sits in) is
+  // linked to (CON-354).
+  link?: { postId: string; campaignId: string }
   // Set when the layer or something inside it is animated with Figma Motion.
   animation?: Animation
 }
@@ -38,6 +46,29 @@ export interface Animation {
 
 export function isVideoExportable(item: SelectionItem): boolean {
   return item.animation?.frame.id === item.id
+}
+
+// How the plugin was launched: a menu command or a relaunch button
+// (manifest.json), or "" when Figma gives none.
+export type LaunchCommand = 'send' | 'boards' | ''
+
+// A campaign board in this file (CON-354).
+export interface BoardInfo {
+  pageId: string
+  pageName: string
+  campaignId: string
+  workspaceId: string
+  lastSyncedAt: string
+  // A duplicated board page: listed, but not synced.
+  copy: boolean
+}
+
+export interface BoardSyncResult {
+  summary: string
+  counts: { added: number; deleted: number; moved: number; changed: number }
+  // Frames added or flagged, for "Show".
+  nodeIds: string[]
+  lastSyncedAt: string
 }
 
 // clientStorage keys. Main refuses any other key.
@@ -71,6 +102,15 @@ export interface RpcMethods {
     params: { nodeId: string; format: VideoFormat; quality: VideoQuality; scale: VideoScale }
     result: ExportedVideo
   }
+  boardsList: { params: Record<string, never>; result: BoardInfo[] }
+  boardCreate: { params: { plan: BoardPlan }; result: { pageId: string; placeholders: number } }
+  boardSync: { params: { pageId: string; plan: BoardPlan }; result: BoardSyncResult }
+  // Shows on the board that its campaign is gone from Ogen.
+  boardGone: { params: { pageId: string; plan: Pick<BoardPlan, 'title' | 'subtitle' | 'syncedLabel'>; banner: string }; result: null }
+  // Switches to a board page, selecting and zooming to nodeIds if given.
+  boardOpen: { params: { pageId: string; nodeIds?: string[] }; result: null }
+  // Records a send on linked frames ("Sent ✓ …" in their notes).
+  markSent: { params: { nodeIds: string[]; label: string }; result: null }
   storageGet: { params: { key: StorageKey }; result: unknown }
   storageSet: { params: { key: StorageKey; value: unknown }; result: null }
   storageDelete: { params: { key: StorageKey }; result: null }
@@ -87,7 +127,8 @@ export type UiToMain =
   | { type: 'select'; nodeId: string }
 
 export type MainToUi =
-  | { type: 'init'; userName: string | null; fileName: string }
+  // board: the current page's board, when it is one.
+  | { type: 'init'; userName: string | null; fileName: string; command: LaunchCommand; board: { campaignId: string; copy: boolean } | null }
   // skipped counts selected layers that are not exportable types.
   | { type: 'selection'; items: SelectionItem[]; skipped: number }
   | { type: 'thumbnail'; id: string; bytes: Uint8Array }

@@ -4,6 +4,27 @@
   "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "dist/ui.html",
+  "menu": [
+    {
+      "name": "Send to Ogen",
+      "command": "send"
+    },
+    {
+      "name": "Campaign boards",
+      "command": "boards"
+    }
+  ],
+  "relaunchButtons": [
+    {
+      "command": "send",
+      "name": "Send to Ogen",
+      "multipleSelection": true
+    },
+    {
+      "command": "boards",
+      "name": "Campaign board"
+    }
+  ],
   "editorType": [
     "figma"
   ],

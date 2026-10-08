@@ -2,6 +2,8 @@
 
 "Send to Ogen": select frames in Figma and send them to an Ogen workspace's
 content bank, optionally attaching them to a campaign post in the same step.
+"Campaign boards" lays out a campaign's posts as placeholder frames and sends
+each one straight to its post.
 
 The plugin renders frames locally with `node.exportAsync()` and uploads the
 bytes to Ogen's plugin API (`/api/plugins/figma/*`), authenticated by a plugin
@@ -218,6 +220,44 @@ The presign and finalize endpoints are specified in CON-347 and built in
 ogen-app/ogen. A storage error is reported as a 400 `upload_failed`, so it
 never reads as a disconnect or a plan limit.
 
+### Campaign boards (CON-354)
+
+The plugin opens on two tabs, **Send** and **Boards**. The menu commands
+("Send to Ogen", "Campaign boards") and the relaunch buttons pick the tab;
+a plain run on a board page opens Boards.
+
+- **Building** (`src/ui/boardPlan.ts` → `src/main/board.ts`): the UI plans a
+  board from the campaign (dates need `Intl`, which the main sandbox lacks):
+  a page with a row per week (Monday first, in the campaign's timezone), a
+  column per day, an "Unscheduled" row, and a placeholder frame per media
+  slot of each post at the post type's canvas. Text-only posts get none;
+  carousels get `min_attachments` slides side by side. Until the server
+  sends canvases (CON-351), stories, reels and shorts default to 1080×1920,
+  videos to 1920×1080 and the rest to 1080×1080, marked "(default size)".
+- **Frames sit directly on the page**, not in sections or auto layout:
+  Figma exports video only from such frames. The week and day structure is
+  drawn around them as locked shapes and text, and a note above each frame
+  says what it is for. Nothing of the plugin's is inside a frame, so exports
+  contain only the design.
+- **Stored state** (`src/shared/board.ts`): each frame carries its post in
+  plugin data (`ogen`), which duplicating copies: a duplicated slide joins
+  its carousel. The page carries the board meta and grid (`ogen.board`). A
+  duplicated page keeps the original's page id, so it is recognised as a
+  copy and not synced.
+- **Sync** fetches the campaign with every post (`GET /campaigns/{id}`,
+  CON-352; until it exists, the campaign list, whose post list may be cut
+  short, so deletions are then not checked) and diffs it with the frames
+  (`diffBoard`). It adds placeholders for new posts, growing a row (and
+  moving the rows below down as a whole) when a day runs out of room, and
+  flags frames in their notes: deleted, moved to another day, a new canvas,
+  or a post that can't take media any more. It never moves or deletes a
+  designer's frame. A frame dragged into the right day stops being "moved".
+- **Sending**: a selected frame that is (or sits in) a placeholder goes to
+  its post without a picker. Frames for several posts go in one send; a
+  post's frames go in reading order (carousel slide order). Other selected
+  frames go wherever the picker says. Frames that reached their post get
+  "Sent to Ogen ✓ …" in their note.
+
 ### Error handling
 
 | Response | Behaviour |
@@ -234,11 +274,11 @@ never reads as a disconnect or a plan limit.
 ## Layout
 
 ```
-src/main/      Figma main thread: selection, thumbnails, export, storage
-src/ui/        Preact UI: screens (Connect, Send, Sending, Result), components
+src/main/      Figma main thread: selection, thumbnails, export, storage, boards
+src/ui/        Preact UI: screens (Connect, Send, Boards, Sending, Result), components
 src/api/       Ogen plugin API client, pairing, posts, image upload
 src/queue/     send queue, pre-flight checks, error messages, summary
-src/shared/    main ⇄ UI message protocol
+src/shared/    main ⇄ UI message protocol, campaign board model
 scripts/       build (esbuild, inlines the UI into dist/ui.html)
 docs/          day-one spikes
 test/          vitest unit tests

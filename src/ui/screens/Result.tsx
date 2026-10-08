@@ -1,7 +1,7 @@
 import { isHttpUrl } from '../../api/pairing'
 import type { ItemStatus, QueueOutcome } from '../../queue/sendQueue'
 import { headline, summarize } from '../../queue/summary'
-import type { SendRequest } from '../../queue/types'
+import { targetOf, type SendRequest } from '../../queue/types'
 import { StatusList } from '../components/StatusList'
 
 export interface ResultScreenProps {
@@ -14,11 +14,7 @@ export interface ResultScreenProps {
 export function ResultScreen({ request, statuses, outcome, onBack }: ResultScreenProps) {
   const summary = summarize(statuses)
   const openUrl = summary.openUrl && isHttpUrl(summary.openUrl) ? summary.openUrl : null
-  const dest = request.destination
-  const where =
-    dest.kind === 'post'
-      ? `to “${dest.post.title || 'Untitled post'}”${dest.post.campaignName ? ` in ${dest.post.campaignName}` : ''}`
-      : 'to the content bank'
+  const where = destinationLabel(request)
 
   return (
     <main class="screen send">
@@ -63,4 +59,13 @@ export function ResultScreen({ request, statuses, outcome, onBack }: ResultScree
       </footer>
     </main>
   )
+}
+
+function destinationLabel(request: SendRequest): string {
+  const posts = new Map(request.items.map((item) => [targetOf(request, item)?.id ?? '', targetOf(request, item)]))
+  const bank = posts.delete('')
+  if (posts.size > 1 || (posts.size === 1 && bank)) return bank ? `to ${posts.size} posts and the content bank` : `to ${posts.size} posts`
+  const post = [...posts.values()][0]
+  if (!post) return 'to the content bank'
+  return `to “${post.title || 'Untitled post'}”${post.campaignName ? ` in ${post.campaignName}` : ''}`
 }

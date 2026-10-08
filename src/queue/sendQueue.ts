@@ -5,7 +5,7 @@ import type { VideoResult, VideoUpload } from '../api/videos'
 import type { ExportedImage, ExportedVideo, ExportFormat, Scale, SelectionItem } from '../shared/messages'
 import { bytesWarning, videoBytesWarning } from './preflight'
 import { codeMessage, errorMessage, upgradeHint } from './errors'
-import type { SendRequest, VideoOptions } from './types'
+import { targetOf, type SendRequest, type VideoOptions } from './types'
 
 export type ItemStatus =
   | { state: 'queued' }
@@ -55,7 +55,6 @@ export async function runSendQueue(
   signal: AbortSignal,
 ): Promise<QueueOutcome> {
   const now = deps.now ?? Date.now
-  const postId = request.destination.kind === 'post' ? request.destination.post.id : undefined
   const skipRest = (from: number, message: string) => {
     for (let j = from; j < request.items.length; j++) onUpdate(j, { state: 'skipped', message })
   }
@@ -68,7 +67,7 @@ export async function runSendQueue(
     }
 
     onUpdate(i, { state: request.video ? 'rendering' : 'exporting' })
-    const prepared = await prepare(request, item, deps, postId)
+    const prepared = await prepare(request, item, deps, targetOf(request, item)?.id)
     if ('failed' in prepared) {
       onUpdate(i, prepared.failed)
       continue

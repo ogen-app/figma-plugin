@@ -1,10 +1,12 @@
 import { animationInfo, type AnimationInfo } from './animation'
+import { createBoard, currentBoard, linkOf, listBoards, markGone, markSent, openBoard, syncBoard } from './board'
 import {
   EXPORTABLE_TYPES,
   VIDEO_FPS,
   type Animation,
   isStorageKey,
   type ExportableType,
+  type LaunchCommand,
   type MainToUi,
   type RpcMethod,
   type RpcMethods,
@@ -63,6 +65,21 @@ const handlers: Handlers = {
     }
     return { bytes, nodeId, nodeName: node.name, fileName: figma.root.name }
   },
+  boardsList: () => listBoards(),
+  boardCreate: ({ plan }) => createBoard(plan),
+  boardSync: ({ pageId, plan }) => syncBoard(pageId, plan),
+  boardGone: async ({ pageId, plan, banner }) => {
+    await markGone(pageId, plan, banner)
+    return null
+  },
+  boardOpen: async ({ pageId, nodeIds }) => {
+    await openBoard(pageId, nodeIds)
+    return null
+  },
+  markSent: async ({ nodeIds, label }) => {
+    await markSent(nodeIds, label)
+    return null
+  },
   storageGet: ({ key }) => figma.clientStorage.getAsync(checkKey(key)),
   storageSet: async ({ key, value }) => {
     await figma.clientStorage.setAsync(checkKey(key), value)
@@ -77,7 +94,7 @@ const handlers: Handlers = {
 figma.ui.onmessage = (msg: UiToMain) => {
   switch (msg.type) {
     case 'ready':
-      post({ type: 'init', userName: figma.currentUser?.name ?? null, fileName: figma.root.name })
+      post({ type: 'init', userName: figma.currentUser?.name ?? null, fileName: figma.root.name, command: launchCommand(), board: currentBoard() })
       break
     case 'request-selection':
       publishSelection()
@@ -114,9 +131,12 @@ function publishSelection() {
   const nodes = selection.filter(isExportable)
   const frames = new Map<string, AnimationInfo>()
   const items: SelectionItem[] = nodes.map((n) => {
-    const item: SelectionItem = { id: n.id, name: n.name, type: n.type, width: n.width, height: n.height }
+    const t = n.absoluteTransform
+    const item: SelectionItem = { id: n.id, name: n.name, type: n.type, width: n.width, height: n.height, x: t[0][2], y: t[1][2] }
     const animation = animationOf(n, frames)
     if (animation) item.animation = animation
+    const linked = linkOf(n)
+    if (linked) item.link = { postId: linked.link.postId, campaignId: linked.link.campaignId }
     return item
   })
   post({ type: 'selection', items, skipped: selection.length - nodes.length })
@@ -155,6 +175,10 @@ function animationOf(node: ExportableNode, frames: Map<string, AnimationInfo>): 
     durationSec: info.durationSec,
     frame: { id: frame.id, name: frame.name, width: frame.width, height: frame.height },
   }
+}
+
+function launchCommand(): LaunchCommand {
+  return figma.command === 'send' || figma.command === 'boards' ? figma.command : ''
 }
 
 function isTopLevelFrame(node: BaseNode): node is FrameNode {

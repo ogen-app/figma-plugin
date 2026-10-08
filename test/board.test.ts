@@ -131,6 +131,7 @@ const link = (postId: string, over: Partial<FrameLink> = {}): FrameLink => ({
   dayKey: '2030-06-03',
   width: 1080,
   height: 1350,
+  note: '',
   issues: [],
   sent: '',
   ...over,

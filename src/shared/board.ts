@@ -85,6 +85,8 @@ export interface FrameLink {
   dayKey: string
   width: number
   height: number
+  // The planned annotation (PlannedSlot.note), redrawn above the frame.
+  note: string
   // Lines the last sync flagged ("Deleted in Ogen", …), drawn in the note.
   issues: string[]
   // e.g. "Sent ✓ Oct 8, 14:02"; "" until the frame is sent.
@@ -137,6 +139,7 @@ export function parseLink(raw: string): FrameLink | null {
     dayKey: str(o.dayKey),
     width: num(o.width, 0),
     height: num(o.height, 0),
+    note: str(o.note),
     issues: Array.isArray(o.issues) ? o.issues.filter((s): s is string => typeof s === 'string') : [],
     sent: str(o.sent),
   }
