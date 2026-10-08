@@ -1,4 +1,4 @@
-import type { BoardPlan } from './board'
+import type { BoardPlan, SeedTarget } from './board'
 
 // The protocol between the main sandbox (figma.* API, no network) and the UI
 // iframe (network, no figma.* API). The UI drives: it calls main through
@@ -31,6 +31,9 @@ export interface SelectionItem {
   // The post a board placeholder (the item or the frame it sits in) is
   // linked to (CON-354).
   link?: { postId: string; campaignId: string }
+  // The item is a placeholder still holding only the image the plugin
+  // placed from Ogen: that image is already on the post (CON-357).
+  seededUnchanged?: boolean
   // Set when the layer or something inside it is animated with Figma Motion.
   animation?: Animation
 }
@@ -69,6 +72,8 @@ export interface BoardSyncResult {
   // Frames added or flagged, for "Show".
   nodeIds: string[]
   lastSyncedAt: string
+  // Frames that can take media from Ogen: added ones and untouched ones.
+  seedable: SeedTarget[]
 }
 
 // clientStorage keys. Main refuses any other key.
@@ -103,7 +108,12 @@ export interface RpcMethods {
     result: ExportedVideo
   }
   boardsList: { params: Record<string, never>; result: BoardInfo[] }
-  boardCreate: { params: { plan: BoardPlan }; result: { pageId: string; placeholders: number } }
+  boardCreate: { params: { plan: BoardPlan }; result: { pageId: string; placeholders: number; frames: SeedTarget[] } }
+  // Places one image from Ogen in a placeholder (CON-357).
+  boardSetImage: {
+    params: { nodeId: string; attachmentId: string; kind: 'image' | 'video'; cropped: boolean; bytes: Uint8Array }
+    result: null
+  }
   boardSync: { params: { pageId: string; plan: BoardPlan }; result: BoardSyncResult }
   // Shows on the board that its campaign is gone from Ogen.
   boardGone: { params: { pageId: string; plan: Pick<BoardPlan, 'title' | 'subtitle' | 'syncedLabel'>; banner: string }; result: null }

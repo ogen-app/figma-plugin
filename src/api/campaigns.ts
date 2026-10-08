@@ -23,6 +23,22 @@ export interface CampaignPost {
   video?: VideoRules | null
   // The rules of the post's type on its platform. undefined when unknown.
   media?: PostTypeRule
+  // The post's media in Ogen, in order (CON-356). undefined when the server
+  // doesn't send it.
+  attachments?: PostAttachment[]
+}
+
+// PostAttachment is one of a post's media in Ogen, with a Figma-ready copy:
+// PNG or JPEG, at most 4096 px. A video's copy is its poster.
+export interface PostAttachment {
+  id: string
+  kind: 'image' | 'video' | 'pdf' | ''
+  position: number
+  width: number
+  height: number
+  // A presigned GET; null when there's no Figma-ready copy (PDFs, videos
+  // without a poster).
+  previewUrl: string | null
 }
 
 export interface VideoRules {
@@ -139,6 +155,7 @@ function toPost(v: unknown, platforms: Map<string, PlatformRules> | null): Campa
     attachment_count: num(o.attachment_count, 0),
     attachable: o.attachable === true,
   }
+  if (Array.isArray(o.media)) post.attachments = toAttachments(o.media)
   const rules = post.platform ? platforms?.get(post.platform.id) : undefined
   if (!rules) return post
   const media = rules.postTypes.get(post.post_type)
@@ -147,6 +164,28 @@ function toPost(v: unknown, platforms: Map<string, PlatformRules> | null): Campa
   // whatever the platform allows.
   post.video = media && media.allowed_kinds.length > 0 && !media.allowed_kinds.includes('video') ? null : rules.video
   return post
+}
+
+// toAttachments keeps the whole post's media (not a thread segment's), in
+// position order.
+function toAttachments(list: unknown[]): PostAttachment[] {
+  const out: PostAttachment[] = []
+  for (const v of list) {
+    const o = rec(v)
+    const id = str(o.id)
+    if (!id || (o.segment_index !== undefined && o.segment_index !== null)) continue
+    const kind = o.kind === 'image' || o.kind === 'video' || o.kind === 'pdf' ? o.kind : ''
+    const url = str(o.preview_url)
+    out.push({
+      id,
+      kind,
+      position: num(o.position, out.length),
+      width: num(o.preview_width, num(o.width, 0)),
+      height: num(o.preview_height, num(o.height, 0)),
+      previewUrl: url.startsWith('https://') ? url : null,
+    })
+  }
+  return out.sort((a, b) => a.position - b.position)
 }
 
 function toPostTypeRule(v: unknown): PostTypeRule | null {

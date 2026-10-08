@@ -32,6 +32,25 @@ export interface PlannedSlot {
   legacyName: string
   // The one-line note drawn under the frame: platform, type, time, size.
   note: string
+  // Media from Ogen to place in the frame (CON-357).
+  seed?: PlannedSeed
+}
+
+export interface PlannedSeed {
+  attachmentId: string
+  // A video seeds its poster.
+  kind: 'image' | 'video'
+  url: string
+  // The image's shape differs from the canvas, so the fill crops it.
+  cropped: boolean
+}
+
+// SeedTarget is a frame that can take its planned seed: a new frame, or a
+// placeholder still as the plugin made it.
+export interface SeedTarget {
+  nodeId: string
+  postId: string
+  slot: number
 }
 
 export interface PlannedPost {
@@ -48,6 +67,9 @@ export interface PlannedPost {
   attachable: boolean
   // Empty for a text-only post: it gets no placeholder.
   slots: PlannedSlot[]
+  // Ids of all the post's media in Ogen; undefined when the server doesn't
+  // say (then a seeded frame's media can't be checked).
+  attachmentIds?: string[]
 }
 
 export interface PlannedWeek {
@@ -97,8 +119,19 @@ export interface FrameLink {
   name: string
   // Lines the last sync flagged ("Deleted in Ogen", …), drawn in the note.
   issues: string[]
-  // e.g. "Sent ✓ Oct 8, 14:02"; "" until the frame is sent.
+  // e.g. "✓ Sent Oct 8, 14:02"; "" until the frame is sent.
   sent: string
+  // The media from Ogen placed in the frame, if any.
+  seed?: FrameSeed
+}
+
+export interface FrameSeed {
+  attachmentId: string
+  kind: 'image' | 'video'
+  // The image fill the plugin set: while the frame still has only this
+  // fill, it holds nothing new to send.
+  imageHash: string
+  cropped: boolean
 }
 
 export interface GridRow {
@@ -157,6 +190,16 @@ export function parseLink(raw: string): FrameLink | null {
     name: str(o.name),
     issues: Array.isArray(o.issues) ? o.issues.filter((s): s is string => typeof s === 'string') : [],
     sent: str(o.sent),
+    ...(isObject(o.seed) && typeof o.seed.attachmentId === 'string' && typeof o.seed.imageHash === 'string'
+      ? {
+          seed: {
+            attachmentId: o.seed.attachmentId,
+            kind: o.seed.kind === 'video' ? ('video' as const) : ('image' as const),
+            imageHash: o.seed.imageHash,
+            cropped: o.seed.cropped === true,
+          },
+        }
+      : {}),
   }
 }
 
@@ -366,6 +409,7 @@ export const ISSUE = {
   deleted: 'Deleted in Ogen',
   locked: "Scheduled, can't take new media",
   textOnly: 'Now a text-only post',
+  imageRemoved: 'Image removed in Ogen',
 } as const
 
 // diffBoard compares the board's frames with the plan. It never moves or
@@ -420,6 +464,9 @@ function postIssues(plan: BoardPlan, post: PlannedPost | undefined, frames: Exis
     }
   }
   if (!post.attachable) lines.push(ISSUE.locked)
+  if (post.attachmentIds && frames.some((f) => f.link.seed && !post.attachmentIds!.includes(f.link.seed.attachmentId))) {
+    lines.push(ISSUE.imageRemoved)
+  }
   return lines
 }
 
@@ -441,13 +488,17 @@ export interface Chip {
 }
 
 // Issues that are information rather than a problem with the frame.
-const MUTED_ISSUES = new Set<string>()
+const MUTED_ISSUES = new Set<string>([ISSUE.imageRemoved])
 
 // noteChips are the status chips under a frame's note: its send status, then
 // the last sync's issues.
-export function noteChips(link: Pick<FrameLink, 'issues' | 'sent'>): Chip[] {
+export function noteChips(link: Pick<FrameLink, 'issues' | 'sent' | 'seed'>): Chip[] {
   const chips: Chip[] = []
   if (link.sent) chips.push({ text: link.sent, tone: 'success' })
+  if (link.seed) {
+    chips.push({ text: link.seed.kind === 'video' ? 'Video poster from Ogen' : 'Image from Ogen', tone: 'info' })
+    if (link.seed.cropped) chips.push({ text: 'Image cropped to fit', tone: 'muted' })
+  }
   for (const issue of link.issues) {
     chips.push(MUTED_ISSUES.has(issue) ? { text: issue, tone: 'muted' } : { text: `⚠ ${issue}`, tone: 'danger' })
   }

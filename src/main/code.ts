@@ -1,5 +1,5 @@
 import { animationInfo, type AnimationInfo } from './animation'
-import { createBoard, currentBoard, linkOf, listBoards, markGone, markSent, openBoard, syncBoard } from './board'
+import { createBoard, currentBoard, linkOf, listBoards, markGone, markSent, openBoard, seededUnchanged, setImage, syncBoard } from './board'
 import {
   EXPORTABLE_TYPES,
   VIDEO_FPS,
@@ -68,6 +68,10 @@ const handlers: Handlers = {
   boardsList: () => listBoards(),
   boardCreate: ({ plan }) => createBoard(plan),
   boardSync: ({ pageId, plan }) => syncBoard(pageId, plan),
+  boardSetImage: async ({ nodeId, attachmentId, kind, cropped, bytes }) => {
+    await setImage(nodeId, attachmentId, kind, cropped, bytes)
+    return null
+  },
   boardGone: async ({ pageId, plan, banner }) => {
     await markGone(pageId, plan, banner)
     return null
@@ -136,7 +140,10 @@ function publishSelection() {
     const animation = animationOf(n, frames)
     if (animation) item.animation = animation
     const linked = linkOf(n)
-    if (linked) item.link = { postId: linked.link.postId, campaignId: linked.link.campaignId }
+    if (linked) {
+      item.link = { postId: linked.link.postId, campaignId: linked.link.campaignId }
+      if (linked.nodeId === n.id && seededUnchanged(n, linked.link)) item.seededUnchanged = true
+    }
     return item
   })
   post({ type: 'selection', items, skipped: selection.length - nodes.length })

@@ -123,7 +123,7 @@ describe('planBoard', () => {
     expect(byId.story!.slots[0]).toMatchObject({ width: 1080, height: 1920 })
     expect(byId.story!.slots[0]!.note).toBe('Instagram · Story · Unscheduled · 1080×1920 (default size)')
     expect(byId.untyped!.slots[0]!.note).toContain('Post type not set')
-    expect(stats).toEqual({ weeks: 1, posts: 5, placeholders: 5, textOnly: 1, unscheduled: 2, noType: 1 })
+    expect(stats).toEqual({ weeks: 1, posts: 5, placeholders: 5, textOnly: 1, unscheduled: 2, noType: 1, seededImages: 0, seededPosters: 0 })
   })
 })
 
