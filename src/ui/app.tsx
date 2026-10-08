@@ -164,7 +164,7 @@ export function App({ bridge }: { bridge: Bridge }) {
       })
       .map((item) => item.id)
     if (nodeIds.length === 0) return
-    const label = `Sent to Ogen ✓ ${sentFmt.format(new Date())}`
+    const label = `✓ Sent ${sentFmt.format(new Date())}`
     bridge.call('markSent', { nodeIds, label }).catch(() => undefined)
   }
 
