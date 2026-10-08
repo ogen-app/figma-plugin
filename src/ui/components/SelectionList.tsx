@@ -9,8 +9,9 @@ export interface SelectionListProps {
   thumbnails: Record<string, string>
   scale: Scale
   limits: Limits
-  // Set while sending as video: the video scale and the target post's rules.
-  video: { scale: VideoScale; rules: VideoRules | null | undefined } | null
+  // Set while sending as video: the video scale and each item's target post
+  // rules.
+  video: { scale: VideoScale; rulesFor: (item: SelectionItem) => VideoRules | null | undefined } | null
   onSelectNode: (nodeId: string) => void
 }
 
@@ -34,7 +35,7 @@ export function SelectionList({ items, skipped, thumbnails, scale, limits, video
           const size = outputSize(item, video && exportable ? video.scale : scale)
           const warnings = video
             ? exportable
-              ? videoWarnings(item, video.rules)
+              ? videoWarnings(item, video.rulesFor(item))
               : []
             : [pixelWarning(item, scale, limits)].filter((w): w is string => w !== null)
           const thumb = thumbnails[item.id]

@@ -1,4 +1,5 @@
 import type { Campaign, CampaignPost } from '../api/campaigns'
+import type { PostTarget } from '../queue/types'
 
 export interface DateGroup {
   // YYYY-MM-DD in the campaign's timezone, or "" for unscheduled posts.
@@ -115,4 +116,47 @@ export function validZone(timezone: string): string {
     zoneCache.set(timezone, zone)
   }
   return zone
+}
+
+// postTarget is what a send needs to know about a post it attaches to.
+export function postTarget(campaign: Campaign, post: CampaignPost): PostTarget {
+  const date = groupByDate([post], campaign.timezone)[0]
+  const when = post.scheduled_at && date ? `${date.label}, ${postTime(post, campaign.timezone)}` : 'Unscheduled'
+  return {
+    id: post.id,
+    title: post.title,
+    campaignName: campaign.name,
+    platformName: post.platform?.name ?? '',
+    ...(post.video !== undefined ? { video: post.video } : {}),
+    detail: [post.media?.label, when].filter(Boolean).join(' · '),
+    attachable: post.attachable,
+    maxAttachments: post.media?.max_attachments ?? null,
+  }
+}
+
+// relativeTime is e.g. "just now", "5 min ago", "3 h ago", "2 d ago".
+export function relativeTime(iso: string, now = Date.now()): string {
+  const at = Date.parse(iso)
+  if (Number.isNaN(at)) return ''
+  const min = Math.floor((now - at) / 60_000)
+  if (min < 1) return 'just now'
+  if (min < 60) return `${min} min ago`
+  const h = Math.floor(min / 60)
+  if (h < 24) return `${h} h ago`
+  const d = Math.floor(h / 24)
+  if (d < 30) return `${d} d ago`
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(at)
+}
+
+// dateRange is a campaign's dates in its zone, e.g. "Jun 2 – Jul 13".
+export function dateRange(campaign: Campaign): string {
+  const zone = validZone(campaign.timezone)
+  const fmt = new Intl.DateTimeFormat('en-US', { timeZone: zone, month: 'short', day: 'numeric' })
+  const part = (iso: string | null) => {
+    const at = iso ? Date.parse(iso) : Number.NaN
+    return Number.isNaN(at) ? '' : fmt.format(at)
+  }
+  const from = part(campaign.start_date)
+  const to = part(campaign.end_date)
+  return from && to ? `${from} – ${to}` : from || to
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks'
 import { listCampaigns, type Campaign, type CampaignPost } from '../../api/campaigns'
 import { isApiError, type ApiClient } from '../../api/client'
 import type { PostTarget } from '../../queue/types'
-import { campaignStatus, filterTree, groupByDate, postStatus, postTime } from '../campaignTree'
+import { campaignStatus, filterTree, groupByDate, postStatus, postTarget, postTime } from '../campaignTree'
 import { PlatformBadge } from './PlatformBadge'
 
 export interface CampaignPickerProps {
@@ -65,13 +65,7 @@ export function CampaignPicker({ api, selected, onSelect, video = false }: Campa
   }
 
   function pick(campaign: Campaign, post: CampaignPost) {
-    onSelect({
-      id: post.id,
-      title: post.title,
-      campaignName: campaign.name,
-      platformName: post.platform?.name ?? '',
-      ...(post.video !== undefined ? { video: post.video } : {}),
-    })
+    onSelect(postTarget(campaign, post))
   }
 
   return (

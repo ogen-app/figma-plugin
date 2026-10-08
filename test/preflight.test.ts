@@ -3,7 +3,7 @@ import { DEFAULT_LIMITS } from '../src/api/types'
 import type { SelectionItem } from '../src/shared/messages'
 import { aspectRatioAllowed, bytesWarning, formatBytes, formatSeconds, outputSize, pixelWarning, videoBytesWarning, videoWarnings } from '../src/queue/preflight'
 
-const frame = (width: number, height: number): SelectionItem => ({ id: '1:2', name: 'Hero', type: 'FRAME', width, height })
+const frame = (width: number, height: number): SelectionItem => ({ id: '1:2', name: 'Hero', type: 'FRAME', width, height, x: 0, y: 0 })
 
 describe('preflight', () => {
   it('computes the exported size', () => {

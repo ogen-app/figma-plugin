@@ -7,7 +7,7 @@ import { runSendQueue, type ItemStatus, type QueueDeps } from '../src/queue/send
 import type { SendRequest } from '../src/queue/types'
 import type { SelectionItem } from '../src/shared/messages'
 
-const items: SelectionItem[] = ['A', 'B', 'C'].map((name, i) => ({ id: `1:${i}`, name, type: 'FRAME', width: 100, height: 100 }))
+const items: SelectionItem[] = ['A', 'B', 'C'].map((name, i) => ({ id: `1:${i}`, name, type: 'FRAME', width: 100, height: 100, x: i * 200, y: 0 }))
 
 const request = (over: Partial<SendRequest> = {}): SendRequest => ({
   items,
@@ -88,6 +88,30 @@ describe('runSendQueue', () => {
     await runSendQueue(request({ destination: { kind: 'post', post } }), t.deps, t.onUpdate, new AbortController().signal)
     expect(t.uploads.every((u) => u.postId === 'p1')).toBe(true)
     expect(t.finals[1]).toMatchObject({ state: 'sent', attachMessage: "The post was already sent for publishing and can't take new images." })
+  })
+
+  it("sends board-linked items to their own posts and the rest to the destination", async () => {
+    const post = { id: 'p1', title: 'Launch', campaignName: 'Q4', platformName: 'LinkedIn' }
+    const story = { id: 'p2', title: 'Story', campaignName: 'Q4', platformName: 'Instagram' }
+    const t = setup([result('a1'), result('a2'), result('a3')])
+    await runSendQueue(
+      request({ destination: { kind: 'post', post }, linked: { '1:1': story, '1:2': story } }),
+      t.deps,
+      t.onUpdate,
+      new AbortController().signal,
+    )
+    expect(t.uploads).toEqual([
+      { nodeId: '1:0', postId: 'p1' },
+      { nodeId: '1:1', postId: 'p2' },
+      { nodeId: '1:2', postId: 'p2' },
+    ])
+  })
+
+  it('sends linked items to their post even when the rest go to the bank', async () => {
+    const story = { id: 'p2', title: 'Story', campaignName: 'Q4', platformName: 'Instagram' }
+    const t = setup([result('a1'), result('a2'), result('a3')])
+    await runSendQueue(request({ linked: { '1:0': story } }), t.deps, t.onUpdate, new AbortController().signal)
+    expect(t.uploads.map((u) => u.postId)).toEqual(['p2', undefined, undefined])
   })
 
   it('marks rejected items and continues', async () => {
