@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'preact/hooks'
-import { listCampaigns } from '../../api/campaigns'
 import { isApiError, type ApiClient } from '../../api/client'
 import { DEFAULT_LIMITS, type Me } from '../../api/types'
-import { linkedTargets, resolveLinks, type LinkedGroup } from '../../queue/linked'
+import { linkedTargets, resolveLinks, type LinkedGroup, type LinkTargets } from '../../queue/linked'
 import type { PostTarget, SendRequest } from '../../queue/types'
 import { isVideoExportable, type ExportFormat, type Scale, type VideoFormat, type VideoQuality, type VideoScale } from '../../shared/messages'
 import type { Bridge } from '../bridge'
+import { fetchCampaign } from '../boardSync'
 import { postTarget } from '../campaignTree'
 import { CampaignPicker } from '../components/CampaignPicker'
 import { PlatformBadge } from '../components/PlatformBadge'
@@ -55,7 +55,7 @@ export interface SendScreenProps {
   onSend: (request: SendRequest) => void
 }
 
-type Targets = { state: 'idle' | 'loading' | 'error' } | { state: 'ready'; byId: Map<string, PostTarget> }
+type Targets = { state: 'idle' | 'loading' | 'error' } | ({ state: 'ready' } & LinkTargets)
 
 export function SendScreen({ bridge, api, store, me, onSend }: SendScreenProps) {
   const selection = useSelection(bridge)
@@ -78,12 +78,13 @@ export function SendScreen({ bridge, api, store, me, onSend }: SendScreenProps) 
 
   const { items } = selection
   const hasLinks = items.some((i) => i.link)
-  const targets = useLinkedTargets(api, hasLinks)
+  const campaignKey = [...new Set(items.flatMap((i) => (i.link ? [i.link.campaignId] : [])))].sort().join(',')
+  const [targets, retryTargets] = useLinkedTargets(api, campaignKey)
   const linkKey = items.map((i) => i.link?.postId ?? '').join(',')
   useEffect(() => setIgnoreLinks(false), [linkKey])
   const useLinks = hasLinks && !ignoreLinks
   const links = useMemo(
-    () => resolveLinks(useLinks ? items : items.map(({ link: _, ...rest }) => rest), targets.state === 'ready' ? targets.byId : null),
+    () => resolveLinks(useLinks ? items : items.map(({ link: _, ...rest }) => rest), targets.state === 'ready' ? targets : null),
     [items, useLinks, targets],
   )
   const linksPending = useLinks && targets.state !== 'ready'
@@ -233,7 +234,14 @@ export function SendScreen({ bridge, api, store, me, onSend }: SendScreenProps) 
             {g.items.length} frames link to “{g.target.title || 'Untitled post'}”, which takes {g.target.maxAttachments}.
           </p>
         ))}
-        {targets.state === 'error' && useLinks && <p class="warning small">Could not load the linked posts from Ogen.</p>}
+        {targets.state === 'error' && useLinks && (
+          <p class="warning small">
+            Could not load the linked posts from Ogen.{' '}
+            <button class="link" onClick={retryTargets}>
+              Retry
+            </button>
+          </p>
+        )}
         {postRefusesVideo && <p class="warning small">This post can't take a video. Pick another post.</p>}
         <button class="primary wide" disabled={blocked} onClick={send}>
           {sendButtonLabel(sendable, video, postCount, toBank)}
@@ -243,21 +251,30 @@ export function SendScreen({ bridge, api, store, me, onSend }: SendScreenProps) 
   )
 }
 
-// useLinkedTargets loads the posts board frames can link to, once any are
-// selected.
-function useLinkedTargets(api: ApiClient, enabled: boolean): Targets {
+// useLinkedTargets loads the posts of the campaigns that selected board
+// frames link to (campaignKey: their sorted ids, comma-joined). Each campaign
+// is read whole, so posts past the campaign list's cap and in archived
+// campaigns are found too.
+function useLinkedTargets(api: ApiClient, campaignKey: string): [Targets, () => void] {
   const [targets, setTargets] = useState<Targets>({ state: 'idle' })
-  const [loaded, setLoaded] = useState(false)
+  const [tries, setTries] = useState(0)
   useEffect(() => {
-    if (!enabled || loaded) return
+    if (!campaignKey) {
+      setTargets({ state: 'idle' })
+      return
+    }
     const ctrl = new AbortController()
     setTargets({ state: 'loading' })
-    listCampaigns(api, ctrl.signal).then(
-      (campaigns) => {
+    const ids = campaignKey.split(',')
+    Promise.all(ids.map((id) => fetchCampaign(api, id, ctrl.signal))).then(
+      (got) => {
         const byId = new Map<string, PostTarget>()
-        for (const c of campaigns) for (const p of c.posts) byId.set(p.id, postTarget(c, p))
-        setTargets({ state: 'ready', byId })
-        setLoaded(true)
+        const complete = new Set<string>()
+        got.forEach((g, i) => {
+          if (g.kind === 'gone' || (g.kind === 'found' && g.complete)) complete.add(ids[i]!)
+          if (g.kind === 'found') for (const p of g.campaign.posts) byId.set(p.id, postTarget(g.campaign, p))
+        })
+        setTargets({ state: 'ready', byId, complete })
       },
       (err) => {
         if (ctrl.signal.aborted || (isApiError(err) && err.status === 401)) return
@@ -265,8 +282,8 @@ function useLinkedTargets(api: ApiClient, enabled: boolean): Targets {
       },
     )
     return () => ctrl.abort()
-  }, [api, enabled, loaded])
-  return targets
+  }, [api, campaignKey, tries])
+  return [targets, () => setTries((n) => n + 1)]
 }
 
 function LinkedPosts({ groups, state, onIgnore }: { groups: LinkedGroup[]; state: Targets['state']; onIgnore: () => void }) {

@@ -18,11 +18,12 @@ const item = (id: string, postId: string | null, x = 0, y = 0): SelectionItem =>
 const target = (id: string, over: Partial<PostTarget> = {}): PostTarget => ({ id, title: id, campaignName: 'C', platformName: 'Instagram', attachable: true, ...over })
 
 describe('resolveLinks', () => {
-  const targets = new Map([
+  const byId = new Map([
     ['carousel', target('carousel', { maxAttachments: 10 })],
     ['single', target('single', { maxAttachments: 1 })],
     ['locked', target('locked', { attachable: false })],
   ])
+  const targets = { byId, complete: new Set(['c']) }
 
   it('groups linked items by post, slides in reading order', () => {
     const out = resolveLinks(
@@ -34,7 +35,7 @@ describe('resolveLinks', () => {
       ['carousel', ['s1', 's2', 's3']],
       ['single', ['one']],
     ])
-    expect(linkedTargets(out.groups)).toEqual({ s1: targets.get('carousel'), s2: targets.get('carousel'), s3: targets.get('carousel'), one: targets.get('single') })
+    expect(linkedTargets(out.groups)).toEqual({ s1: byId.get('carousel'), s2: byId.get('carousel'), s3: byId.get('carousel'), one: byId.get('single') })
   })
 
   it('sets aside items linked to missing or locked posts, and flags crowded posts', () => {
@@ -42,6 +43,12 @@ describe('resolveLinks', () => {
     expect(out.missing.map((i) => i.id)).toEqual(['a'])
     expect(out.locked.map((i) => i.id)).toEqual(['b'])
     expect(out.crowded.map((g) => g.target.id)).toEqual(['single'])
+  })
+
+  it("sends to a post by id when its campaign's list may be cut short", () => {
+    const out = resolveLinks([item('a', 'past-cap')], { byId, complete: new Set() })
+    expect(out.missing).toEqual([])
+    expect(out.groups.map((g) => [g.target.id, g.target.title])).toEqual([['past-cap', 'a']])
   })
 
   it('holds linked items back while the posts load', () => {
