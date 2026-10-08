@@ -13,6 +13,7 @@ import {
   placeFlow,
   placeStack,
   readingOrder,
+  sameColor,
   syncSummary,
   type ExistingFrame,
   type FrameLink,
@@ -255,6 +256,17 @@ describe('layout', () => {
   it('orders frames the way a carousel reads', () => {
     const f = (x: number, y: number) => ({ x, y, height: 100 })
     expect([f(200, 0), f(0, 10), f(0, 300)].sort(readingOrder)).toEqual([f(0, 10), f(200, 0), f(0, 300)])
+  })
+})
+
+describe('sameColor', () => {
+  it("matches a colour that went through Figma's 32-bit floats", () => {
+    const grey = { r: 236 / 255, g: 236 / 255, b: 239 / 255 }
+    const stored = { r: Math.fround(grey.r), g: Math.fround(grey.g), b: Math.fround(grey.b) }
+    expect(stored.r === grey.r).toBe(false)
+    expect(sameColor(stored, grey)).toBe(true)
+    expect(sameColor(stored, { r: 1, g: 1, b: 1 })).toBe(false)
+    expect(sameColor({ ...stored, b: stored.b + 2 / 255 }, grey)).toBe(false)
   })
 })
 
