@@ -66,17 +66,50 @@ describe('sendVideo', () => {
 })
 
 describe('campaign post video rules', () => {
-  const posts = (...extra: object[]) =>
-    toCampaigns({ campaigns: [{ id: 'c', posts: extra.map((e, i) => ({ id: `p${i}`, ...e })) }] })[0]!.posts
+  // The server's shape (CON-347): rules live in a top-level platforms map
+  // keyed by platform id, not on the posts.
+  const platforms = {
+    ig: {
+      name: 'Instagram',
+      video: { max_file_size_bytes: 1, allowed_formats: ['mp4'], max_duration_seconds: 90, allowed_aspect_ratios: ['9:16', 4], max_attachments_per_post: 1 },
+      post_types: [
+        { slug: 'image-post', label: 'Image', whitelist_only: false, rule: { allowed_kinds: ['image'], min_attachments: 1, max_attachments: 10 } },
+        { slug: 'reel', label: 'Reel', whitelist_only: false, rule: { allowed_kinds: ['video'], min_attachments: 1, max_attachments: 1 } },
+        { slug: 'story', label: 'Story', whitelist_only: false, rule: { allowed_kinds: ['image', 'video'], min_attachments: 1, max_attachments: 1 } },
+      ],
+    },
+    li: { name: 'LinkedIn', video: null, post_types: [] },
+  }
+  const posts = (withPlatforms: boolean, ...extra: object[]) =>
+    toCampaigns({
+      campaigns: [{ id: 'c', posts: extra.map((e, i) => ({ id: `p${i}`, ...e })) }],
+      ...(withPlatforms ? { platforms } : {}),
+    })[0]!.posts
+  const rules = { max_duration_seconds: 90, allowed_aspect_ratios: ['9:16'], max_per_post: 1 }
 
-  it('distinguishes no rules sent, no video allowed, and rules', () => {
-    const [unknown, none, rules] = posts(
-      {},
-      { video: null },
-      { video: { max_duration_seconds: 90, allowed_aspect_ratios: ['9:16', 4], max_per_post: 1 } },
+  it("resolves a post's rules through its platform and post type", () => {
+    const [reel, story, image, li, noPlatform, unknownPlatform] = posts(
+      true,
+      { platform: { id: 'ig', name: 'Instagram' }, post_type: 'reel' },
+      { platform: { id: 'ig', name: 'Instagram' }, post_type: 'story' },
+      { platform: { id: 'ig', name: 'Instagram' }, post_type: 'image-post' },
+      { platform: { id: 'li', name: 'LinkedIn' }, post_type: 'video' },
+      { platform: null },
+      { platform: { id: 'x', name: 'X' } },
     )
-    expect(unknown!.video).toBeUndefined()
-    expect(none!.video).toBeNull()
-    expect(rules!.video).toEqual({ max_duration_seconds: 90, allowed_aspect_ratios: ['9:16'], max_per_post: 1 })
+    expect(reel!.video).toEqual(rules)
+    expect(story!.video).toEqual(rules)
+    // The platform takes video, but an image post doesn't.
+    expect(image!.video).toBeNull()
+    expect(li!.video).toBeNull()
+    expect(noPlatform!.video).toBeUndefined()
+    expect(unknownPlatform!.video).toBeUndefined()
+    expect(reel!.media).toEqual({ slug: 'reel', label: 'Reel', allowed_kinds: ['video'], min_attachments: 1, max_attachments: 1, canvas: null })
+  })
+
+  it('checks nothing when the server sends no platform rules', () => {
+    const [post] = posts(false, { platform: { id: 'ig', name: 'Instagram' }, post_type: 'reel', video: null })
+    expect(post!.video).toBeUndefined()
+    expect(post!.media).toBeUndefined()
   })
 })
