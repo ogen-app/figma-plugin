@@ -267,6 +267,8 @@ describe('sameColor', () => {
     expect(sameColor(stored, grey)).toBe(true)
     expect(sameColor(stored, { r: 1, g: 1, b: 1 })).toBe(false)
     expect(sameColor({ ...stored, b: stored.b + 2 / 255 }, grey)).toBe(false)
+    // A designer's edit finer than an 8-bit step is still a different colour.
+    expect(sameColor({ ...stored, r: stored.r + 1e-4 }, grey)).toBe(false)
   })
 })
 
