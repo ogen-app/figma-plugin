@@ -102,7 +102,7 @@ function humanize(s: string): string {
 const zoneCache = new Map<string, string>()
 
 // validZone falls back to UTC for "" or a zone this runtime doesn't know.
-function validZone(timezone: string): string {
+export function validZone(timezone: string): string {
   if (!timezone) return 'UTC'
   let zone = zoneCache.get(timezone)
   if (!zone) {
