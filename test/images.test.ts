@@ -5,7 +5,7 @@ import { fakeFetch, json } from './helpers'
 
 describe('sendImage', () => {
   it('posts multipart with the frame metadata', async () => {
-    const f = fakeFetch(json(201, { asset: { id: 'a1', title: 'Hero' }, deduplicated: true, attachment: null, attach_error: null, open_url: 'https://app/x' }))
+    const f = fakeFetch(json(201, { asset: { id: 'a1', title: 'Hero' }, deduplicated: true, attachment: null, open_url: 'https://app/x' }))
     const api = createApiClient({ baseUrl: 'http://api.test', getToken: () => 'ogp_t', fetchImpl: f.fetch })
     const res = await sendImage(api, {
       bytes: new Uint8Array([137, 80, 78, 71]),
@@ -25,6 +25,21 @@ describe('sendImage', () => {
     expect(file.type).toBe('image/png')
     expect(file.size).toBe(4)
     expect(res).toMatchObject({ deduplicated: true, open_url: 'https://app/x', attachment: null })
+    expect(res.asset?.id).toBe('a1')
+  })
+
+  it('reads a post send as an attachment with no asset', async () => {
+    const f = fakeFetch(
+      json(201, { asset: null, deduplicated: false, attachment: { id: 'att1', post_id: 'p1' }, open_url: 'https://app/posts/p1' }),
+    )
+    const api = createApiClient({ baseUrl: 'http://api.test', getToken: () => 'ogp_t', fetchImpl: f.fetch })
+    const res = await sendImage(api, { bytes: new Uint8Array(1), format: 'PNG', nodeId: '1:2', nodeName: 'Hero', fileName: '', postId: 'p1' })
+    expect(res).toEqual({
+      asset: null,
+      deduplicated: false,
+      attachment: { id: 'att1', post_id: 'p1' },
+      open_url: 'https://app/posts/p1',
+    })
   })
 
   it('falls back to the node id for an unnamed frame and omits empty optionals', async () => {

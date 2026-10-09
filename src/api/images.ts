@@ -11,16 +11,12 @@ export interface ImageUpload {
   postId?: string
 }
 
-export interface AttachError {
-  code: string
-  message: string
-}
-
+// ImageResult carries asset for a frame sent to the content bank and
+// attachment for one sent to a post; exactly one of the two is set.
 export interface ImageResult {
-  asset: { id: string; title: string; status: string; url: string }
+  asset: { id: string; title: string; status: string; url: string } | null
   deduplicated: boolean
   attachment: { id: string; post_id: string } | null
-  attach_error: AttachError | null
   open_url: string
 }
 
@@ -30,13 +26,14 @@ const MAX_FILE_NAME = 200
 
 const MIME: Record<ExportFormat, string> = { PNG: 'image/png', JPG: 'image/jpeg' }
 
-// sendImage uploads one exported frame to the content bank, attaching it to
-// postId when given.
+// sendImage uploads one exported frame: onto postId when given, which keeps it
+// out of the content bank, otherwise into the content bank. A post that is
+// gone or already sent for publishing is a post_not_found / post_locked reject.
 export async function sendImage(api: ApiClient, input: ImageUpload, signal?: AbortSignal): Promise<ImageResult> {
   const nodeName = clip(input.nodeName.trim(), MAX_NODE_NAME) || `Frame ${input.nodeId}`
   const ext = input.format === 'JPG' ? 'jpg' : 'png'
   const form = new FormData()
-  // The server sniffs the type from the bytes and names the asset after
+  // The server sniffs the type from the bytes and names the image after
   // node_name; the filename here only helps its SVG check.
   form.append('file', new Blob([input.bytes as Uint8Array<ArrayBuffer>], { type: MIME[input.format] }), `frame.${ext}`)
   form.append('node_id', input.nodeId)
@@ -52,12 +49,12 @@ export function toImageResult(v: unknown): ImageResult {
   const o = rec(v)
   const asset = rec(o.asset)
   const att = rec(o.attachment)
-  const attErr = rec(o.attach_error)
   return {
-    asset: { id: str(asset.id), title: str(asset.title), status: str(asset.status), url: str(asset.url) },
+    asset: asset.id
+      ? { id: str(asset.id), title: str(asset.title), status: str(asset.status), url: str(asset.url) }
+      : null,
     deduplicated: o.deduplicated === true,
     attachment: att.id ? { id: str(att.id), post_id: str(att.post_id) } : null,
-    attach_error: attErr.code ? { code: str(attErr.code), message: str(attErr.message) } : null,
     open_url: str(o.open_url),
   }
 }

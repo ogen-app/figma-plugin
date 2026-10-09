@@ -160,7 +160,7 @@ export function App({ bridge }: { bridge: Bridge }) {
     const nodeIds = request.items
       .filter((item, i) => {
         const st = statuses[i]
-        return request.linked?.[item.id] && st?.state === 'sent' && !st.attachMessage
+        return request.linked?.[item.id] && st?.state === 'sent'
       })
       .map((item) => item.id)
     if (nodeIds.length === 0) return

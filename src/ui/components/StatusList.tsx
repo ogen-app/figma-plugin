@@ -47,7 +47,6 @@ function describe(s: ItemStatus): { icon: string; tone: 'muted' | 'success' | 'w
         if (s.platformIssues) return { icon: '!', tone: 'warning', text: `Attached, but: ${s.platformIssues}` }
         return { icon: '✓', tone: 'success', text: 'Video attached' }
       }
-      if (s.attachMessage) return { icon: '!', tone: 'warning', text: `In the content bank, not attached: ${s.attachMessage}` }
       if (s.result.deduplicated) return { icon: '✓', tone: 'success', text: 'Already in Ogen' }
       return { icon: '✓', tone: 'success', text: s.result.attachment ? 'Sent and attached' : 'Sent' }
     case 'failed':

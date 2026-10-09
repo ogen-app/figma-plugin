@@ -21,7 +21,6 @@ const result = (id: string, over: Partial<ImageResult> = {}): ImageResult => ({
   asset: { id, title: id, status: 'pending', url: '' },
   deduplicated: false,
   attachment: null,
-  attach_error: null,
   open_url: `https://app.getogen.com/content-bank/assets/${id}`,
   ...over,
 })
@@ -78,16 +77,32 @@ describe('runSendQueue', () => {
     ])
   })
 
-  it('passes the post id and reports attach errors without failing the item', async () => {
+  it('passes the post id, fails an item its post refuses and carries on', async () => {
     const post = { id: 'p1', title: 'Launch', campaignName: 'Q4', platformName: 'LinkedIn' }
-    const t = setup([
-      result('a1', { attachment: { id: 'att', post_id: 'p1' } }),
-      result('a2', { attach_error: { code: 'post_locked', message: 'locked' } }),
-      result('a3'),
-    ])
-    await runSendQueue(request({ destination: { kind: 'post', post } }), t.deps, t.onUpdate, new AbortController().signal)
+    const attached = (id: string) =>
+      result(id, { asset: null, attachment: { id, post_id: 'p1' }, open_url: 'https://app.getogen.com/posts/p1' })
+    const t = setup([attached('att1'), err(409, 'post_locked'), attached('att3')])
+    const out = await runSendQueue(request({ destination: { kind: 'post', post } }), t.deps, t.onUpdate, new AbortController().signal)
+    expect(out).toEqual({ kind: 'done' })
     expect(t.uploads.every((u) => u.postId === 'p1')).toBe(true)
-    expect(t.finals[1]).toMatchObject({ state: 'sent', attachMessage: "The post was already sent for publishing and can't take new images." })
+    expect(t.finals.map((s) => s.state)).toEqual(['sent', 'failed', 'sent'])
+    expect(t.finals[1]).toMatchObject({
+      state: 'failed',
+      code: 'post_locked',
+      message: "The post was already sent for publishing and can't take new images.",
+    })
+  })
+
+  it('fails an item whose post is gone', async () => {
+    const post = { id: 'p1', title: 'Launch', campaignName: 'Q4', platformName: 'LinkedIn' }
+    const t = setup([err(404, 'post_not_found')])
+    await runSendQueue(
+      request({ items: items.slice(0, 1), destination: { kind: 'post', post } }),
+      t.deps,
+      t.onUpdate,
+      new AbortController().signal,
+    )
+    expect(t.finals[0]).toMatchObject({ state: 'failed', code: 'post_not_found', message: 'The post no longer exists in this workspace.' })
   })
 
   it("sends board-linked items to their own posts and the rest to the destination", async () => {

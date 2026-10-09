@@ -7,7 +7,6 @@ const result = (id: string, deduplicated = false): ImageResult => ({
   asset: { id, title: id, status: 'pending', url: '' },
   deduplicated,
   attachment: null,
-  attach_error: null,
   open_url: `https://app.getogen.com/content-bank/assets/${id}`,
 })
 
@@ -17,20 +16,19 @@ describe('summary', () => {
       { state: 'failed', message: 'x' },
       { state: 'sent', result: result('a1') },
       { state: 'sent', result: result('a2', true) },
-      { state: 'sent', result: result('a3'), attachMessage: 'locked' },
+      { state: 'sent', result: result('a3') },
       { state: 'skipped', message: 'Cancelled.' },
     ]
     const s = summarize(statuses)
     expect(s).toEqual({
       sent: 3,
       deduplicated: 1,
-      notAttached: 1,
       withIssues: 0,
       failed: 1,
       skipped: 1,
       openUrl: 'https://app.getogen.com/content-bank/assets/a1',
     })
-    expect(headline(s)).toBe('2 sent · 1 already in Ogen · 1 not attached · 1 failed · 1 not sent')
+    expect(headline(s)).toBe('2 sent · 1 already in Ogen · 1 failed · 1 not sent')
   })
 
   it('says when nothing was sent', () => {
