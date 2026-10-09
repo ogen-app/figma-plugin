@@ -45,11 +45,13 @@ export async function sendImage(api: ApiClient, input: ImageUpload, signal?: Abo
   return toImageResult(data)
 }
 
+// toImageResult throws on a response with neither an asset nor an attachment:
+// nothing confirms the frame landed, so it must not count as sent.
 export function toImageResult(v: unknown): ImageResult {
   const o = rec(v)
   const asset = rec(o.asset)
   const att = rec(o.attachment)
-  return {
+  const result: ImageResult = {
     asset: asset.id
       ? { id: str(asset.id), title: str(asset.title), status: str(asset.status), url: str(asset.url) }
       : null,
@@ -57,4 +59,6 @@ export function toImageResult(v: unknown): ImageResult {
     attachment: att.id ? { id: str(att.id), post_id: str(att.post_id) } : null,
     open_url: str(o.open_url),
   }
+  if (!result.asset && !result.attachment) throw new Error('Ogen sent an unexpected response. Check Ogen before sending again.')
+  return result
 }
