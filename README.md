@@ -1,7 +1,8 @@
 # Ogen Figma plugin
 
-"Send to Ogen": select frames in Figma and send them to an Ogen workspace's
-content bank, optionally attaching them to a campaign post in the same step.
+"Send to Ogen": select frames in Figma and send them to an Ogen workspace,
+either into its content bank or straight onto a campaign post. A frame sent to
+a post is the post's own media and doesn't appear in the content bank.
 "Campaign boards" lays out a campaign's posts as placeholder frames and sends
 each one straight to its post.
 
@@ -126,8 +127,8 @@ sequenceDiagram
         M->>M: node.exportAsync({format, SCALE})
         M-->>U: {bytes, nodeName, fileName}
         U->>API: POST /images (multipart file + node_id, node_name, file_name, post_id?)
-        API-->>U: 201 {asset, deduplicated, attachment, attach_error, open_url}
-        Note over U,API: 429 → wait Retry-After · 503/network → retry once<br/>402/403 → stop queue · 400/415 → mark item, continue
+        API-->>U: 201 {asset | attachment, deduplicated, open_url}
+        Note over U,API: 429 → wait Retry-After · 503/network → retry once<br/>402/403 → stop queue · 400/404/409/415 → mark item, continue
     end
     U->>M: notify "3 sent · 1 already in Ogen"
     U-->>D: Result screen · Open in Ogen ↗
@@ -284,7 +285,7 @@ a plain run on a board page opens Boards.
 | 402 / 403 (plan limit) | Stop the queue and show the limit message with an upgrade hint |
 | 400 / 415 rejects | Mark the item failed and continue |
 | 503 / network | Retry once, then mark the item failed |
-| `attach_error` in a 201 | Item is in the bank; it shows why it wasn't attached |
+| 404 `post_not_found` / 409 `post_locked` | Mark the item failed (nothing is stored) and continue |
 | `platform_validation` in a video 201 | The video is attached; it shows which platform rules it breaks |
 | Storage PUT 4xx / 5xx | 400 `upload_failed` marks the item failed; 5xx is retried once |
 

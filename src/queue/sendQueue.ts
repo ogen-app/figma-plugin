@@ -4,7 +4,7 @@ import type { Limits } from '../api/types'
 import type { VideoResult, VideoUpload } from '../api/videos'
 import type { ExportedImage, ExportedVideo, ExportFormat, Scale, SelectionItem } from '../shared/messages'
 import { bytesWarning, videoBytesWarning } from './preflight'
-import { codeMessage, errorMessage, upgradeHint } from './errors'
+import { errorMessage, upgradeHint } from './errors'
 import { targetOf, type SendRequest, type VideoOptions } from './types'
 
 export type ItemStatus =
@@ -14,9 +14,8 @@ export type ItemStatus =
   | { state: 'rendering' }
   | { state: 'uploading' }
   | { state: 'waiting'; untilMs: number }
-  // attachMessage: an image reached the bank but not the post.
   // platformIssues: a video was attached but breaks the platform's rules.
-  | { state: 'sent'; result: ImageResult | VideoResult; attachMessage?: string; platformIssues?: string }
+  | { state: 'sent'; result: ImageResult | VideoResult; platformIssues?: string }
   | { state: 'failed'; code?: string; message: string }
   | { state: 'skipped'; message: string }
 
@@ -47,7 +46,8 @@ const TRANSIENT_RETRY_DELAY_MS = 1000
 
 // runSendQueue exports and uploads each item in order, one at a time, and
 // reports every status change through onUpdate. Per-item rejects (bad image,
-// too large, failed attach) don't stop the queue; a 401 or a plan limit does.
+// too large, post gone or locked) don't stop the queue; a 401 or a plan limit
+// does.
 export async function runSendQueue(
   request: SendRequest,
   deps: QueueDeps,
@@ -170,10 +170,7 @@ function sentStatus(result: ImageResult | VideoResult): ItemStatus {
     const issues = result.platform_validation.map((v) => v.message).join(' ')
     return issues ? { state: 'sent', result, platformIssues: issues } : { state: 'sent', result }
   }
-  const attachMessage = result.attach_error
-    ? codeMessage(result.attach_error.code, result.attach_error.message || 'Could not attach to the post.')
-    : undefined
-  return { state: 'sent', result, attachMessage }
+  return { state: 'sent', result }
 }
 
 async function pause(deps: QueueDeps, ms: number, signal: AbortSignal): Promise<boolean> {

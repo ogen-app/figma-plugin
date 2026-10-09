@@ -22,7 +22,6 @@ const MESSAGES: Record<string, string> = {
   plugin_token_invalid: 'Disconnected from Ogen.',
   post_not_found: 'The post no longer exists in this workspace.',
   post_locked: "The post was already sent for publishing and can't take new images.",
-  attach_failed: 'Could not attach the image to the post.',
 }
 
 const QUOTA_FEATURES: Record<string, string> = {
