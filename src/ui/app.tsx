@@ -109,6 +109,14 @@ export function App({ bridge }: { bridge: Bridge }) {
     setView((v) => (v.name === 'send' && v.session.token === session.token ? { ...v, me } : v))
   }
 
+  // recheck reloads /me on the Send screen, e.g. once the owner chose a plan.
+  async function recheck() {
+    if (view.name !== 'send') return
+    const { token } = view.session
+    const me = await services.api.me().catch(() => null)
+    if (me) setView((v) => (v.name === 'send' && v.session.token === token ? { ...v, me } : v))
+  }
+
   async function disconnect() {
     // Best effort: a failed revoke still disconnects this install; the
     // connection stays listed in Ogen settings, where it can be revoked.
@@ -188,7 +196,7 @@ export function App({ bridge }: { bridge: Bridge }) {
             onDisconnect={disconnect}
           />
           {tab === 'send' ? (
-            <SendScreen bridge={bridge} api={services.api} store={services.store} me={view.me} onSend={send} />
+            <SendScreen bridge={bridge} api={services.api} store={services.store} me={view.me} onSend={send} onRecheck={() => void recheck()} />
           ) : (
             <BoardsScreen bridge={bridge} api={services.api} workspaceId={view.me?.workspace.id || view.session.workspace.id} current={doc.board} />
           )}

@@ -12,7 +12,9 @@ import { PlatformBadge } from '../components/PlatformBadge'
 import { Segmented } from '../components/Segmented'
 import { SelectionList } from '../components/SelectionList'
 import { useSelection } from '../hooks/useSelection'
+import { isBillingRequired } from '../../queue/errors'
 import { pixelWarning } from '../../queue/preflight'
+import { BillingNotice } from '../components/BillingNotice'
 import { DEFAULT_PREFS, type Prefs, type Store } from '../storage'
 
 export const DEFAULT_HEIGHT = 540
@@ -53,11 +55,13 @@ export interface SendScreenProps {
   store: Store
   me: Me | null
   onSend: (request: SendRequest) => void
+  // Reloads /me, after the owner may have chosen a plan.
+  onRecheck: () => void
 }
 
-type Targets = { state: 'idle' | 'loading' | 'error' } | ({ state: 'ready' } & LinkTargets)
+type Targets = { state: 'idle' | 'loading' | 'error' | 'billing' } | ({ state: 'ready' } & LinkTargets)
 
-export function SendScreen({ bridge, api, store, me, onSend }: SendScreenProps) {
+export function SendScreen({ bridge, api, store, me, onSend, onRecheck }: SendScreenProps) {
   const selection = useSelection(bridge)
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS)
   const [toPost, setToPost] = useState(false)
@@ -122,7 +126,10 @@ export function SendScreen({ bridge, api, store, me, onSend }: SendScreenProps) 
   // switching back to images still works, but don't send video to it.
   const postRefusesVideo = video && looseSendable.length === 0 && loose.some(isVideoExportable) && post?.video === null
   const needsPick = looseSendable.length > 0 && sendTo === 'post' && !post
-  const blocked = sendable === 0 || needsPick || linksPending
+  // The workspace has no plan yet: nothing can be sent until the owner
+  // chooses one.
+  const billing = me?.billing_required === true || (useLinks && targets.state === 'billing')
+  const blocked = billing || sendable === 0 || needsPick || linksPending
 
   function send() {
     const loosePart = postRefusesVideo ? [] : looseSendable
@@ -162,57 +169,69 @@ export function SendScreen({ bridge, api, store, me, onSend }: SendScreenProps) 
         />
       </section>
 
-      <section class="options">
-        <div class="row">
-          <Segmented
-            label="Format"
-            value={format}
-            options={formats}
-            onChange={(f) => updatePrefs(f === 'VIDEO' ? { video: true } : { video: false, format: f })}
+      {billing ? (
+        <section class="options">
+          <BillingNotice
+            inset
+            onCheckAgain={() => {
+              onRecheck()
+              if (targets.state === 'billing') retryTargets()
+            }}
           />
-          {video ? (
-            <Segmented label="Scale" value={prefs.videoScale} options={VIDEO_SCALES} onChange={(videoScale) => updatePrefs({ videoScale })} />
-          ) : (
-            <Segmented label="Scale" value={prefs.scale} options={SCALES} onChange={(scale) => updatePrefs({ scale })} />
-          )}
-        </div>
-        {video && (
+        </section>
+      ) : (
+        <section class="options">
           <div class="row">
-            <Segmented label="File" value={prefs.videoFormat} options={VIDEO_FORMATS} onChange={(videoFormat) => updatePrefs({ videoFormat })} />
-            <Segmented label="Quality" value={prefs.videoQuality} options={VIDEO_QUALITIES} onChange={(videoQuality) => updatePrefs({ videoQuality })} />
-          </div>
-        )}
-        {useLinks && (
-          <LinkedPosts
-            groups={links.groups}
-            state={targets.state}
-            onIgnore={() => setIgnoreLinks(true)}
-          />
-        )}
-        {hasLinks && !useLinks && (
-          <p class="muted small">
-            Board links are ignored for this send.{' '}
-            <button class="link" onClick={() => setIgnoreLinks(false)}>
-              Send to the linked posts
-            </button>
-          </p>
-        )}
-        {loose.length > 0 && (
-          <>
             <Segmented
-              label={useLinks ? 'Send the other frames to' : 'Send to'}
-              value={sendTo}
-              options={[
-                { value: 'bank', label: 'Content bank', disabled: video, title: video ? 'Videos can only be attached to a post' : undefined },
-                { value: 'post', label: 'Campaigns' },
-              ]}
-              onChange={(v) => setToPost(v === 'post')}
+              label="Format"
+              value={format}
+              options={formats}
+              onChange={(f) => updatePrefs(f === 'VIDEO' ? { video: true } : { video: false, format: f })}
             />
-            {video && <p class="muted small">Videos can only be attached to a campaign post.</p>}
-            {sendTo === 'post' && <CampaignPicker api={api} selected={post} onSelect={setPost} video={video} />}
-          </>
-        )}
-      </section>
+            {video ? (
+              <Segmented label="Scale" value={prefs.videoScale} options={VIDEO_SCALES} onChange={(videoScale) => updatePrefs({ videoScale })} />
+            ) : (
+              <Segmented label="Scale" value={prefs.scale} options={SCALES} onChange={(scale) => updatePrefs({ scale })} />
+            )}
+          </div>
+          {video && (
+            <div class="row">
+              <Segmented label="File" value={prefs.videoFormat} options={VIDEO_FORMATS} onChange={(videoFormat) => updatePrefs({ videoFormat })} />
+              <Segmented label="Quality" value={prefs.videoQuality} options={VIDEO_QUALITIES} onChange={(videoQuality) => updatePrefs({ videoQuality })} />
+            </div>
+          )}
+          {useLinks && (
+            <LinkedPosts
+              groups={links.groups}
+              state={targets.state}
+              onIgnore={() => setIgnoreLinks(true)}
+            />
+          )}
+          {hasLinks && !useLinks && (
+            <p class="muted small">
+              Board links are ignored for this send.{' '}
+              <button class="link" onClick={() => setIgnoreLinks(false)}>
+                Send to the linked posts
+              </button>
+            </p>
+          )}
+          {loose.length > 0 && (
+            <>
+              <Segmented
+                label={useLinks ? 'Send the other frames to' : 'Send to'}
+                value={sendTo}
+                options={[
+                  { value: 'bank', label: 'Content bank', disabled: video, title: video ? 'Videos can only be attached to a post' : undefined },
+                  { value: 'post', label: 'Campaigns' },
+                ]}
+                onChange={(v) => setToPost(v === 'post')}
+              />
+              {video && <p class="muted small">Videos can only be attached to a campaign post.</p>}
+              {sendTo === 'post' && <CampaignPicker api={api} selected={post} onSelect={setPost} video={video} />}
+            </>
+          )}
+        </section>
+      )}
 
       <footer class="footer">
         {oversized > 0 && (
@@ -282,7 +301,7 @@ function useLinkedTargets(api: ApiClient, campaignKey: string): [Targets, () => 
       },
       (err) => {
         if (ctrl.signal.aborted || (isApiError(err) && err.status === 401)) return
-        setTargets({ state: 'error' })
+        setTargets({ state: isBillingRequired(err) ? 'billing' : 'error' })
       },
     )
     return () => ctrl.abort()

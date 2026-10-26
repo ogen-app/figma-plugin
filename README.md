@@ -59,7 +59,12 @@ To use another API, pass `--api` (that's all `dev:remote` does) or set
 node scripts/build.mjs --mode dev --api https://api.dev.getogen.com
 ```
 
-The origin must be listed in `manifest.json` → `networkAccess`. Figma blocks
+Links the plugin opens in the Ogen app (e.g. `/plans` when a workspace has no
+plan yet) use the app origin: `api.<domain>` becomes `app.<domain>`, and a
+local API pairs with the local UI at `http://localhost:9002`. Override it with
+`--app` or `OGEN_APP_URL`.
+
+The API origin must be listed in `manifest.json` → `networkAccess`. Figma blocks
 every other origin, and the build fails early if it is missing. Dev builds may
 use `allowedDomains` or `devAllowedDomains`; production builds only
 `allowedDomains`.

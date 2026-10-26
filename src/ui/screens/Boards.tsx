@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { listCampaigns, type Campaign } from '../../api/campaigns'
 import { isApiError, type ApiClient } from '../../api/client'
-import { errorMessage } from '../../queue/errors'
+import { errorMessage, isBillingRequired } from '../../queue/errors'
 import type { BoardPlan, SeedTarget } from '../../shared/board'
 import type { BoardInfo } from '../../shared/messages'
 import type { Bridge } from '../bridge'
@@ -9,6 +9,7 @@ import { planBoard, type PlanStats } from '../boardPlan'
 import { fetchBytes, runSeeds, seedJobs, seedSummary, type SeedOutcome } from '../boardSeed'
 import { fetchCampaign } from '../boardSync'
 import { campaignStatus, dateRange, relativeTime } from '../campaignTree'
+import { BillingNotice } from '../components/BillingNotice'
 import { TALL_HEIGHT } from './Send'
 
 // The Boards tab (CON-354): campaigns with a board in this file, to sync or
@@ -22,7 +23,7 @@ export interface BoardsScreenProps {
   current: { campaignId: string; copy: boolean } | null
 }
 
-type Load<T> = { state: 'loading' } | { state: 'error' } | { state: 'ready'; value: T }
+type Load<T> = { state: 'loading' | 'error' | 'billing' } | { state: 'ready'; value: T }
 
 type RowResult = { tone: 'success' | 'warning' | 'danger'; text: string; nodeIds?: string[]; pageId?: string }
 
@@ -51,7 +52,7 @@ export function BoardsScreen({ bridge, api, workspaceId, current }: BoardsScreen
       (value) => setCampaigns({ state: 'ready', value }),
       (err) => {
         if (ctrl.signal.aborted || (isApiError(err) && err.status === 401)) return
-        setCampaigns({ state: 'error' })
+        setCampaigns({ state: isBillingRequired(err) ? 'billing' : 'error' })
       },
     )
     return () => ctrl.abort()
@@ -151,6 +152,7 @@ export function BoardsScreen({ bridge, api, workspaceId, current }: BoardsScreen
       }
     } catch (err) {
       if (isApiError(err) && err.status === 401) return
+      if (isBillingRequired(err)) return setCampaigns({ state: 'billing' })
       setResult(board.campaignId, { tone: 'danger', text: `Sync failed: ${errorMessage(err)}` })
     } finally {
       setBusy(null)
@@ -180,6 +182,7 @@ export function BoardsScreen({ bridge, api, workspaceId, current }: BoardsScreen
       }
     } catch (err) {
       if (isApiError(err) && err.status === 401) return
+      if (isBillingRequired(err)) return setCampaigns({ state: 'billing' })
       setResult(campaign.id, { tone: 'danger', text: `Could not create the board: ${errorMessage(err)}` })
     } finally {
       setBusy(null)
@@ -187,6 +190,16 @@ export function BoardsScreen({ bridge, api, workspaceId, current }: BoardsScreen
   }
 
   const currentCopy = current?.copy ? copies.find((b) => b.campaignId === current.campaignId) : undefined
+
+  if (campaigns.state === 'billing') {
+    return (
+      <div class="boards">
+        <div class="boards-list">
+          <BillingNotice onCheckAgain={() => setReloads((n) => n + 1)} />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div class="boards">

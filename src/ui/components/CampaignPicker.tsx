@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'preact/hooks'
 import { listCampaigns, type Campaign, type CampaignPost } from '../../api/campaigns'
 import { isApiError, type ApiClient } from '../../api/client'
+import { isBillingRequired } from '../../queue/errors'
 import type { PostTarget } from '../../queue/types'
 import { campaignStatus, filterTree, groupByDate, postStatus, postTarget, postTime } from '../campaignTree'
+import { BillingNotice } from './BillingNotice'
 import { PlatformBadge } from './PlatformBadge'
 
 export interface CampaignPickerProps {
@@ -13,7 +15,7 @@ export interface CampaignPickerProps {
   video?: boolean
 }
 
-type Load = { state: 'loading' } | { state: 'error' } | { state: 'ready'; campaigns: Campaign[] }
+type Load = { state: 'loading' | 'error' | 'billing' } | { state: 'ready'; campaigns: Campaign[] }
 
 export function CampaignPicker({ api, selected, onSelect, video = false }: CampaignPickerProps) {
   const [load, setLoad] = useState<Load>({ state: 'loading' })
@@ -32,7 +34,7 @@ export function CampaignPicker({ api, selected, onSelect, video = false }: Campa
       },
       (err) => {
         if (ctrl.signal.aborted || (isApiError(err) && err.status === 401)) return
-        setLoad({ state: 'error' })
+        setLoad({ state: isBillingRequired(err) ? 'billing' : 'error' })
       },
     )
     return () => ctrl.abort()
@@ -66,6 +68,14 @@ export function CampaignPicker({ api, selected, onSelect, video = false }: Campa
 
   function pick(campaign: Campaign, post: CampaignPost) {
     onSelect(postTarget(campaign, post))
+  }
+
+  if (load.state === 'billing') {
+    return (
+      <div class="campaign-picker">
+        <BillingNotice inset onCheckAgain={() => setReloads((n) => n + 1)} />
+      </div>
+    )
   }
 
   return (

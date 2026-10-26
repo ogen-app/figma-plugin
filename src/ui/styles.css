@@ -424,6 +424,11 @@ button.wide {
   margin: 0;
 }
 
+/* Inside a list or panel that already has its own padding. */
+.banner.inset {
+  margin: 0;
+}
+
 .logo {
   flex: none;
   display: block;
