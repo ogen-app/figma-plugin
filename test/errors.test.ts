@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ApiError } from '../src/api/client'
-import { errorMessage, UPGRADE_HINT, upgradeHint } from '../src/queue/errors'
+import { BILLING_HINT, errorMessage, isBillingRequired, UPGRADE_HINT, upgradeHint } from '../src/queue/errors'
 
 describe('errorMessage', () => {
   it('maps known codes', () => {
@@ -13,6 +13,13 @@ describe('errorMessage', () => {
     const media = new ApiError(402, 'entitlement_exceeded', 'x', undefined, { feature: 'media_storage_bytes' })
     expect(errorMessage(media)).toBe('Your workspace has reached its media storage limit.')
     expect(errorMessage(new ApiError(402, undefined, 'x', undefined, {}))).toBe('Your workspace has reached a plan limit.')
+  })
+
+  it('says a workspace without a plan needs one, not that it hit a limit', () => {
+    const billing = new ApiError(402, 'billing_required', 'x', undefined, { error: 'billing_required' })
+    expect(errorMessage(billing)).toBe('This workspace needs a plan before it can receive files.')
+    expect(isBillingRequired(billing)).toBe(true)
+    expect(isBillingRequired(new ApiError(402, 'entitlement_exceeded', 'x'))).toBe(false)
   })
 
   it('falls back to the server message for unknown 4xx and a generic one for 5xx', () => {
@@ -28,5 +35,11 @@ describe('upgradeHint', () => {
       url: 'https://app/billing',
     })
     expect(upgradeHint(new ApiError(402, undefined, 'x'))).toEqual({ text: UPGRADE_HINT })
+  })
+
+  it('points a workspace without a plan at choosing one', () => {
+    expect(upgradeHint(new ApiError(402, 'billing_required', 'x'))).toEqual({ text: 'Choose a plan in Ogen', url: 'http://app.test/plans' })
+    expect(BILLING_HINT.url).toBe('http://app.test/plans')
+    expect(upgradeHint(new ApiError(402, 'entitlement_exceeded', 'x'))).toEqual({ text: UPGRADE_HINT })
   })
 })

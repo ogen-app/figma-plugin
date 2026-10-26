@@ -2,6 +2,7 @@ import { isHttpUrl } from '../../api/pairing'
 import type { ItemStatus, QueueOutcome } from '../../queue/sendQueue'
 import { headline, summarize } from '../../queue/summary'
 import { targetOf, type SendRequest } from '../../queue/types'
+import { BillingNotice } from '../components/BillingNotice'
 import { StatusList } from '../components/StatusList'
 
 export interface ResultScreenProps {
@@ -37,6 +38,7 @@ export function ResultScreen({ request, statuses, outcome, onBack }: ResultScree
           )}
         </div>
       )}
+      {outcome.kind === 'billing_required' && <BillingNotice />}
       {outcome.kind === 'cancelled' && (
         <div class="banner">
           <p>Sending was cancelled. Frames already sent stay in Ogen.</p>

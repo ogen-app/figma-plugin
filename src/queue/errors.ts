@@ -22,6 +22,7 @@ const MESSAGES: Record<string, string> = {
   plugin_token_invalid: 'Disconnected from Ogen.',
   post_not_found: 'The post no longer exists in this workspace.',
   post_locked: "The post was already sent for publishing and can't take new images.",
+  billing_required: 'This workspace needs a plan before it can receive files.',
 }
 
 const QUOTA_FEATURES: Record<string, string> = {
@@ -31,6 +32,17 @@ const QUOTA_FEATURES: Record<string, string> = {
 
 export const UPGRADE_HINT = 'Upgrade your plan in Ogen to send more.'
 
+// A workspace created while billing is on can't be used until its owner
+// checks out (CON-409): the server answers every call but /me and token
+// revoke with 402 billing_required. It has no plan to upgrade from.
+export const BILLING_MESSAGE = MESSAGES.billing_required!
+export const BILLING_HINT = { text: 'Choose a plan in Ogen', url: `${__APP_BASE__}/plans` }
+export const BILLING_OWNER_NOTE = 'Only the workspace owner can choose a plan.'
+
+export function isBillingRequired(err: unknown): boolean {
+  return isApiError(err) && err.code === 'billing_required'
+}
+
 export function codeMessage(code: string | undefined, fallback: string): string {
   return (code && MESSAGES[code]) || fallback
 }
@@ -38,6 +50,7 @@ export function codeMessage(code: string | undefined, fallback: string): string 
 // errorMessage turns any failure into one sentence for the item list.
 export function errorMessage(err: unknown): string {
   if (isApiError(err)) {
+    if (err.code === 'billing_required') return BILLING_MESSAGE
     if (err.status === 402 || err.code === 'entitlement_exceeded') return quotaMessage(err.body)
     if (err.status === 429) return 'Ogen is rate limiting this plugin. Try again in a minute.'
     return codeMessage(err.code, err.status >= 500 ? MESSAGES.internal_error! : err.message)
@@ -51,8 +64,9 @@ function quotaMessage(body: unknown): string {
 }
 
 // upgradeHint is the server's upgrade pointer when it sends one, else a
-// generic nudge.
+// generic nudge; a workspace without a plan is pointed at choosing one.
 export function upgradeHint(err: unknown): { text: string; url?: string } {
+  if (isBillingRequired(err)) return BILLING_HINT
   const url = isApiError(err) ? str(rec(err.body).upgrade_url) : ''
   return url ? { text: 'Upgrade your plan', url } : { text: UPGRADE_HINT }
 }

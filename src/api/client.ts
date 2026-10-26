@@ -3,8 +3,9 @@ import { isRecord, toMe, type Me } from './types'
 export const PLUGIN_PATH = '/api/plugins/figma'
 
 // Codes the server sends as a bare `{error: "<code>"}` rather than
-// `{code, error}`: the entitlement denials rendered by its error handler.
-const BARE_CODES = new Set(['entitlement_exceeded', 'feature_not_available'])
+// `{code, error}`: the entitlement denials rendered by its error handler, and
+// the billing gate's 402 for a workspace that hasn't chosen a plan.
+const BARE_CODES = new Set(['entitlement_exceeded', 'feature_not_available', 'billing_required'])
 
 export class ApiError extends Error {
   constructor(

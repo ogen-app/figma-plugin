@@ -17,6 +17,14 @@ describe('api client', () => {
     expect((f.calls[0]!.init.headers as Record<string, string>).Authorization).toBe('Bearer ogp_t')
     expect(me.workspace.name).toBe('Acme')
     expect(me.limits).toEqual({ max_image_bytes: 52428800, max_image_pixels: 100_000_000, max_video_bytes: 200 * 1024 * 1024 })
+    expect(me).not.toHaveProperty('billing_required')
+  })
+
+  it('reads billing_required from /me when the API reports it', async () => {
+    const f = fakeFetch(json(200, { workspace: { id: 'w', name: 'Acme' }, billing_required: true }), json(200, { billing_required: 'yes' }))
+    const { api } = client(f)
+    expect((await api.me()).billing_required).toBe(true)
+    expect(await api.me()).not.toHaveProperty('billing_required')
   })
 
   it('uploads to a presigned URL without the Ogen token', async () => {
@@ -75,6 +83,13 @@ describe('api client', () => {
       [400, undefined, 'file is required'],
       [502, undefined, 'Request failed (HTTP 502)'],
     ])
+  })
+
+  it('reads billing_required and keeps the connection', async () => {
+    const f = fakeFetch(json(402, { error: 'billing_required' }))
+    const { api, onUnauthorized } = client(f)
+    await expect(api.request('GET', '/campaigns')).rejects.toMatchObject({ status: 402, code: 'billing_required' })
+    expect(onUnauthorized).not.toHaveBeenCalled()
   })
 
   it('turns a fetch failure into a network_error', async () => {

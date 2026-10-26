@@ -10,6 +10,7 @@ describe('build', () => {
     expect(html).toContain('<script>')
     expect(html).not.toContain('INLINE_')
     expect(html).toContain('http://localhost:9001')
+    expect(html).toContain('http://localhost:9002')
   })
 
   it('accepts the dev environment only in dev builds', () => {
@@ -23,7 +24,14 @@ describe('build', () => {
 
   it('takes the origin from --api', () => {
     execFileSync('node', ['scripts/build.mjs', '--mode', 'dev', '--api', 'https://api.dev.getogen.com'], { stdio: 'pipe' })
-    expect(readFileSync('dist/ui.html', 'utf8')).toContain('https://api.dev.getogen.com')
+    const html = readFileSync('dist/ui.html', 'utf8')
+    expect(html).toContain('https://api.dev.getogen.com')
+    expect(html).toContain('https://app.dev.getogen.com')
+  })
+
+  it('takes the app origin from --app', () => {
+    execFileSync('node', ['scripts/build.mjs', '--mode', 'dev', '--app', 'http://localhost:9005'], { stdio: 'pipe' })
+    expect(readFileSync('dist/ui.html', 'utf8')).toContain('http://localhost:9005')
   })
 
   it('refuses an API origin missing from the manifest', () => {

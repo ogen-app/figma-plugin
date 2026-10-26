@@ -165,6 +165,18 @@ describe('runSendQueue', () => {
     expect(t.uploads).toHaveLength(2)
   })
 
+  it('stops when the workspace needs a plan, without calling it a limit', async () => {
+    const t = setup([result('a1'), err(402, 'billing_required', { error: 'billing_required' })])
+    const out = await runSendQueue(request(), t.deps, t.onUpdate, new AbortController().signal)
+    expect(out).toEqual({ kind: 'billing_required' })
+    expect(t.finals).toEqual([
+      expect.objectContaining({ state: 'sent' }),
+      { state: 'failed', code: 'billing_required', message: 'This workspace needs a plan before it can receive files.' },
+      { state: 'skipped', message: 'Not sent: the workspace needs a plan.' },
+    ])
+    expect(t.uploads).toHaveLength(2)
+  })
+
   it('stops on 401', async () => {
     const t = setup([err(401, 'plugin_token_invalid')])
     const out = await runSendQueue(request(), t.deps, t.onUpdate, new AbortController().signal)

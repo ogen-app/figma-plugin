@@ -25,6 +25,8 @@ export type QueueOutcome =
   | { kind: 'unauthorized' }
   // A plan limit stopped the queue; later items were not tried.
   | { kind: 'quota'; message: string; hint: { text: string; url?: string } }
+  // The workspace has no plan yet; later items were not tried.
+  | { kind: 'billing_required' }
 
 export interface QueueDeps {
   exportNode: (item: SelectionItem, format: ExportFormat, scale: Scale) => Promise<ExportedImage>
@@ -46,8 +48,8 @@ const TRANSIENT_RETRY_DELAY_MS = 1000
 
 // runSendQueue exports and uploads each item in order, one at a time, and
 // reports every status change through onUpdate. Per-item rejects (bad image,
-// too large, post gone or locked) don't stop the queue; a 401 or a plan limit
-// does.
+// too large, post gone or locked) don't stop the queue; a 401, a plan limit or
+// a workspace without a plan does.
 export async function runSendQueue(
   request: SendRequest,
   deps: QueueDeps,
@@ -93,6 +95,11 @@ export async function runSendQueue(
           onUpdate(i, { state: 'failed', code: err.code, message: errorMessage(err) })
           skipRest(i + 1, 'Not sent: disconnected from Ogen.')
           return { kind: 'unauthorized' }
+        }
+        if (err.code === 'billing_required') {
+          onUpdate(i, { state: 'failed', code: err.code, message: errorMessage(err) })
+          skipRest(i + 1, 'Not sent: the workspace needs a plan.')
+          return { kind: 'billing_required' }
         }
         if (err.status === 402 || err.status === 403) {
           const message = errorMessage(err)

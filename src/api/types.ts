@@ -32,6 +32,9 @@ export interface Me {
   user: User
   connection: Connection
   limits: Limits
+  // The workspace has no plan yet and the API refuses its uploads (CON-409).
+  // Undefined from an API that doesn't report it.
+  billing_required?: boolean
 }
 
 export const DEFAULT_LIMITS: Limits = {
@@ -94,7 +97,7 @@ export function toMe(v: unknown): Me {
   const o = rec(v)
   const conn = rec(o.connection)
   const limits = rec(o.limits)
-  return {
+  const me: Me = {
     workspace: toWorkspace(o.workspace),
     user: toUser(o.user),
     connection: { id: str(conn.id), label: str(conn.label), created_at: str(conn.created_at) },
@@ -104,4 +107,6 @@ export function toMe(v: unknown): Me {
       max_video_bytes: num(limits.max_video_bytes, DEFAULT_LIMITS.max_video_bytes),
     },
   }
+  if (typeof o.billing_required === 'boolean') me.billing_required = o.billing_required
+  return me
 }

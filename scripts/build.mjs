@@ -2,11 +2,12 @@
 // with the UI bundle and styles inlined (Figma loads the UI as one HTML
 // string, so it cannot fetch sibling files).
 //
-//   node scripts/build.mjs --mode dev|prod [--api <origin>] [--watch]
+//   node scripts/build.mjs --mode dev|prod [--api <origin>] [--app <origin>] [--watch]
 //
 // The API origin is fixed per build: --api, else OGEN_API_URL, else the mode
 // default. It must be listed in manifest.json networkAccess, which Figma
-// enforces. npm scripts pass --api rather than an inline env assignment,
+// enforces. The Ogen app origin, for links the plugin opens (e.g. /plans), is
+// --app, else OGEN_APP_URL, else derived from the API origin. npm scripts pass --api rather than an inline env assignment,
 // which Windows' cmd can't parse.
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { parseArgs } from 'node:util'
@@ -21,6 +22,7 @@ const { values: args } = parseArgs({
   options: {
     mode: { type: 'string', default: 'prod' },
     api: { type: 'string' },
+    app: { type: 'string' },
     watch: { type: 'boolean', default: false },
   },
 })
@@ -30,12 +32,14 @@ if (!(mode in DEFAULT_API)) {
   fail(`unknown --mode "${mode}", expected dev or prod`)
 }
 const apiBase = (args.api ?? process.env.OGEN_API_URL ?? DEFAULT_API[mode]).replace(/\/+$/, '')
+const appBase = (args.app ?? process.env.OGEN_APP_URL ?? appOrigin(apiBase)).replace(/\/+$/, '')
 
 const manifest = JSON.parse(await readFile('manifest.json', 'utf8'))
 checkNetworkAccess(manifest, apiBase, mode)
 
 const define = {
   __API_BASE__: JSON.stringify(apiBase),
+  __APP_BASE__: JSON.stringify(appBase),
   __DEV__: String(mode === 'dev'),
 }
 
@@ -67,7 +71,7 @@ const uiOptions = {
 }
 
 await mkdir('dist', { recursive: true })
-console.log(`[build] mode=${mode} api=${apiBase}`)
+console.log(`[build] mode=${mode} api=${apiBase} app=${appBase}`)
 
 if (args.watch) {
   const contexts = await Promise.all([esbuild.context(mainOptions), esbuild.context(uiOptions)])
@@ -107,6 +111,15 @@ function inlineIntoHtml() {
       })
     },
   }
+}
+
+// appOrigin guesses the app's origin from the API's: api.<domain> serves
+// app.<domain>, and a local API goes with the local UI's Vite server.
+function appOrigin(api) {
+  const url = new URL(api)
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return `${url.protocol}//${url.hostname}:9002`
+  if (url.hostname.startsWith('api.')) return `${url.protocol}//app.${url.hostname.slice(4)}`
+  return url.origin
 }
 
 function checkNetworkAccess(manifest, origin, mode) {
