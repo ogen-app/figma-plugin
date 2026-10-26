@@ -7,7 +7,7 @@ export function BillingNotice({ onCheckAgain, inset = false }: { onCheckAgain?: 
   return (
     <div class={`banner billing${inset ? ' inset' : ''}`} role="alert">
       <p>{BILLING_MESSAGE}</p>
-      <button class="link" onClick={() => window.open(BILLING_HINT.url, '_blank')}>
+      <button class="link" onClick={() => window.open(BILLING_HINT.url, '_blank', 'noopener')}>
         {BILLING_HINT.text} ↗
       </button>
       <p class="muted small">{BILLING_OWNER_NOTE}</p>
