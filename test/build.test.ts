@@ -1,5 +1,7 @@
-import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('build', () => {
@@ -52,13 +54,26 @@ describe('build', () => {
 })
 
 describe('verify-release', () => {
+  // verify runs the verifier and returns its stderr, failing the test on
+  // anything but a clean pass or the verifier's own report.
   const verify = (...args: string[]) => {
-    try {
-      execFileSync('node', ['scripts/verify-release.mjs', ...args], { stdio: 'pipe' })
-      return ''
-    } catch (err) {
-      return String((err as { stderr: Buffer }).stderr)
-    }
+    const { status, stderr } = spawnSync('node', ['scripts/verify-release.mjs', ...args], { encoding: 'utf8' })
+    if (status === 0) return ''
+    expect(status).toBe(1)
+    expect(stderr).toMatch(/^\[verify\] not a publishable production build:\n/)
+    return stderr
+  }
+
+  // release copies a prod build into a temp dir, with manifest changes.
+  const release = (edit: (manifest: Record<string, any>) => void) => {
+    execFileSync('node', ['scripts/build.mjs', '--mode', 'prod'], { stdio: 'pipe' })
+    const dir = mkdtempSync(join(tmpdir(), 'ogen-release-'))
+    cpSync('dist', join(dir, 'dist'), { recursive: true })
+    const manifest = JSON.parse(readFileSync('manifest.json', 'utf8'))
+    manifest.id = '1234567890'
+    edit(manifest)
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest))
+    return dir
   }
 
   it('rejects a dev build', () => {
@@ -72,10 +87,26 @@ describe('verify-release', () => {
   it('passes a prod build, short of the real plugin id until it is set', () => {
     execFileSync('node', ['scripts/build.mjs', '--mode', 'prod'], { stdio: 'pipe' })
     const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
-    const failures = verify('--tag', `v${version}`)
-      .split('\n')
-      .filter((line) => line.startsWith('  - '))
-    expect(failures.filter((line) => !line.includes('is not a real Figma plugin id'))).toEqual([])
+    const out = verify('--tag', `v${version}`)
+    if (out !== '') {
+      expect(out.trim().split('\n').slice(1)).toEqual([expect.stringContaining('is not a real Figma plugin id')])
+    }
+  })
+
+  it('passes a prod build with a real plugin id', () => {
+    expect(verify('--dir', release(() => {}))).toBe('')
+  })
+
+  it('rejects any allowedDomains entry beyond the production origins', () => {
+    for (const extra of ['https://staging.getogen.com', 'https://*.getogen.com', 'https://*.r2.cloudflarestorage.com']) {
+      const dir = release((m) => m.networkAccess.allowedDomains.push(extra))
+      expect(verify('--dir', dir)).toContain(`${extra} is not an approved production origin`)
+    }
+  })
+
+  it('rejects allowedDomains missing a production origin', () => {
+    const dir = release((m) => (m.networkAccess.allowedDomains = ['https://api.getogen.com']))
+    expect(verify('--dir', dir)).toContain('allowedDomains is missing https://assets.getogen.com')
   })
 
   it('rejects a tag that is not the package version', () => {

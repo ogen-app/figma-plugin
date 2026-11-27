@@ -85,7 +85,8 @@ every update after that. The first listing is tracked in
       `https://app.getogen.com/integrations/figma/connect?key=…`.
 - [ ] **API origin is confirmed.** If production is not
       `https://api.getogen.com`, update `allowedDomains` in `manifest.json`
-      and `DEFAULT_API.prod` in `scripts/origins.mjs` together.
+      and `DEFAULT_API.prod` (and so `PROD_DOMAINS`) in
+      `scripts/origins.mjs` together.
 - [ ] **Spikes are recorded** in [docs/spikes.md](docs/spikes.md). In
       particular, the Dev Mode result decides `editorType` (and
       `capabilities: ["inspect"]`).
@@ -140,8 +141,8 @@ it on `main`, delete the tag (`git push origin :refs/tags/v<version>` and
    npm run verify:release -- --tag v<version>                  # [verify] ok
    ```
 
-`verify:release` checks that the manifest has the real plugin id and only
-production domains, that the bundle calls `https://api.getogen.com` and
+`verify:release` checks that the manifest has the real plugin id and exactly
+the production domains (`PROD_DOMAINS` in `scripts/origins.mjs`), that the bundle calls `https://api.getogen.com` and
 mentions no development origin, and that the dev-only console readout is
 stripped. `devAllowedDomains` (localhost, `https://api.dev.getogen.com` and
 the R2 API host the dev environment still signs on) stays in the manifest.
@@ -237,12 +238,20 @@ Publish from the checkout of step 2, the same files you smoke-tested.
 Users can't pin an old version, so a rollback is a new publish of a known
 good build:
 
-1. Do step 2 with the last good GitHub release: check out its tag and unzip
-   its `ogen-figma-plugin-v<version>.zip` over it. Don't rebuild: the zip is
-   what users ran.
-2. `npm run verify:release` will reject an old release that predates the
-   real plugin id or a domain change; then don't roll back past it. Run a
-   short smoke test.
+1. Check the last good GitHub release against **today's** rules: on an
+   up-to-date `main`, unzip its `ogen-figma-plugin-v<version>.zip` into a
+   scratch folder and run the current verifier on it. A checked-out old tag
+   would run that tag's verifier, which knows nothing of later domain
+   changes.
+   ```sh
+   git checkout main && git pull --ff-only
+   unzip -o ~/Downloads/ogen-figma-plugin-v<version>.zip -d /tmp/ogen-rollback
+   node scripts/verify-release.mjs --dir /tmp/ogen-rollback    # [verify] ok
+   ```
+   If it fails (for example, the release predates the real plugin id or a
+   domain change), don't roll back to it.
+2. Do step 2 with that release: check out its tag and unzip the same zip over
+   it. Don't rebuild: the zip is what users ran. Run a short smoke test.
 3. Publish it with **Publish new version**, with release notes such as
    `v0.2.1 — reverts v0.2.0 (…)`.
 4. Fix forward on `main`, then release as usual.

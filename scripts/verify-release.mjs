@@ -2,22 +2,25 @@
 // Figma uploads them exactly as they are on disk, so this runs on every
 // release (CI on a v* tag, and RELEASE.md step 2 before a manual publish).
 //
-//   node scripts/verify-release.mjs [--tag v1.2.3]
+//   node scripts/verify-release.mjs [--tag v1.2.3] [--dir <release files>]
 //
-// With --tag, the tag must match package.json's version. Exits 1 and lists
-// every failed check.
+// With --tag, the tag must match package.json's version. --dir checks the
+// manifest.json and dist/ of an unzipped release elsewhere (a rollback
+// candidate) against this checkout's rules. Exits 1 and lists every failed
+// check.
 import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { DEFAULT_API } from './origins.mjs'
+import { DEFAULT_API, PROD_DOMAINS } from './origins.mjs'
 
 const PLACEHOLDER_ID = 'ogen-send-to-ogen'
 
-const { values: args } = parseArgs({ options: { tag: { type: 'string' } } })
+const { values: args } = parseArgs({ options: { tag: { type: 'string' }, dir: { type: 'string', default: '.' } } })
 
-const manifest = JSON.parse(await readFile('manifest.json', 'utf8'))
+const manifest = JSON.parse(await readFile(join(args.dir, 'manifest.json'), 'utf8'))
 const pkg = JSON.parse(await readFile('package.json', 'utf8'))
-const ui = await readFile('dist/ui.html', 'utf8')
-const code = await readFile('dist/code.js', 'utf8')
+const ui = await readFile(join(args.dir, 'dist/ui.html'), 'utf8')
+const code = await readFile(join(args.dir, 'dist/code.js'), 'utf8')
 
 const access = manifest.networkAccess ?? {}
 const allowed = access.allowedDomains ?? []
@@ -27,10 +30,11 @@ const failures = []
 const check = (ok, msg) => ok || failures.push(msg)
 
 check(manifest.id !== PLACEHOLDER_ID && /^\d+$/.test(manifest.id ?? ''), `manifest id "${manifest.id}" is not a real Figma plugin id`)
-check(allowed.includes(DEFAULT_API.prod), `allowedDomains is missing the production API ${DEFAULT_API.prod}`)
+for (const origin of PROD_DOMAINS) {
+  check(allowed.includes(origin), `allowedDomains is missing ${origin}`)
+}
 for (const origin of allowed) {
-  check(origin.startsWith('https://'), `allowedDomains entry ${origin} is not https`)
-  check(!devHosts.includes(host(origin)), `allowedDomains entry ${origin} is a development origin`)
+  check(PROD_DOMAINS.includes(origin), `allowedDomains entry ${origin} is not an approved production origin`)
 }
 check(ui.includes(DEFAULT_API.prod), `dist/ui.html does not call the production API ${DEFAULT_API.prod}`)
 for (const h of devHosts) {
@@ -47,7 +51,7 @@ if (failures.length > 0) {
   console.error(`[verify] not a publishable production build:\n${failures.map((f) => `  - ${f}`).join('\n')}`)
   process.exit(1)
 }
-console.log(`[verify] ok: v${pkg.version}, plugin ${manifest.id}, api ${DEFAULT_API.prod}, network ${allowed.join(' ')}`)
+console.log(`[verify] ok: ${args.dir === '.' ? `v${pkg.version}` : args.dir}, plugin ${manifest.id}, api ${DEFAULT_API.prod}, network ${allowed.join(' ')}`)
 
 // host returns an origin's hostname, keeping a leading "*." wildcard, which
 // URL can't parse.
