@@ -43,9 +43,43 @@ describe('build', () => {
     ).toThrow(/not in manifest\.json networkAccess/)
   })
 
-  it('lets video uploads reach R2 storage, with a reason for reviewers', () => {
+  it('lets video uploads reach Ogen storage, with a reason for reviewers', () => {
     const manifest = JSON.parse(readFileSync('manifest.json', 'utf8'))
-    expect(manifest.networkAccess.allowedDomains).toContain('https://*.r2.cloudflarestorage.com')
+    expect(manifest.networkAccess.allowedDomains).toEqual(['https://api.getogen.com', 'https://assets.getogen.com'])
+    expect(manifest.networkAccess.devAllowedDomains).toContain('https://*.r2.cloudflarestorage.com')
     expect(manifest.networkAccess.reasoning).toMatch(/video/)
+  })
+})
+
+describe('verify-release', () => {
+  const verify = (...args: string[]) => {
+    try {
+      execFileSync('node', ['scripts/verify-release.mjs', ...args], { stdio: 'pipe' })
+      return ''
+    } catch (err) {
+      return String((err as { stderr: Buffer }).stderr)
+    }
+  }
+
+  it('rejects a dev build', () => {
+    execFileSync('node', ['scripts/build.mjs', '--mode', 'dev'], { stdio: 'pipe' })
+    const out = verify()
+    expect(out).toContain('does not call the production API')
+    expect(out).toContain('development origin localhost')
+    expect(out).toContain('spike readout')
+  })
+
+  it('passes a prod build, short of the real plugin id until it is set', () => {
+    execFileSync('node', ['scripts/build.mjs', '--mode', 'prod'], { stdio: 'pipe' })
+    const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
+    const failures = verify('--tag', `v${version}`)
+      .split('\n')
+      .filter((line) => line.startsWith('  - '))
+    expect(failures.filter((line) => !line.includes('is not a real Figma plugin id'))).toEqual([])
+  })
+
+  it('rejects a tag that is not the package version', () => {
+    execFileSync('node', ['scripts/build.mjs', '--mode', 'prod'], { stdio: 'pipe' })
+    expect(verify('--tag', 'v0.0.0-nope')).toContain('does not match package.json version')
   })
 })

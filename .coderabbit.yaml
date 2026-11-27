@@ -55,10 +55,12 @@ reviews:
 
     - path: "manifest.json"
       instructions: |
-        networkAccess.allowedDomains must list only the production API origin;
-        localhost and non-production environments (api.dev.getogen.com)
-        belong in devAllowedDomains. Flag any wildcard domain or a
-        reasoning field that does not match the domains listed.
+        networkAccess.allowedDomains must list only production origins: the
+        API (api.getogen.com) and Ogen's storage (assets.getogen.com);
+        localhost and non-production environments (api.dev.getogen.com, the
+        dev R2 host *.r2.cloudflarestorage.com) belong in devAllowedDomains.
+        Flag any wildcard in allowedDomains or a reasoning field that does
+        not match the domains listed.
 
     - path: "src/**/*.{ts,tsx}"
       instructions: |
