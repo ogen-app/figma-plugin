@@ -22,9 +22,13 @@ const pkg = JSON.parse(await readFile('package.json', 'utf8'))
 const ui = await readFile(join(args.dir, 'dist/ui.html'), 'utf8')
 const code = await readFile(join(args.dir, 'dist/code.js'), 'utf8')
 
-const access = manifest.networkAccess ?? {}
-const allowed = access.allowedDomains ?? []
-const devHosts = [...new Set(['localhost', '127.0.0.1', ...(access.devAllowedDomains ?? []).map(host)])]
+const current = JSON.parse(await readFile('manifest.json', 'utf8'))
+
+const allowed = manifest.networkAccess?.allowedDomains ?? []
+// Development origins come from this checkout's manifest as well as the
+// candidate's, so an old release is judged by today's dev origins too.
+const devDomains = [current, manifest].flatMap((m) => m.networkAccess?.devAllowedDomains ?? [])
+const devHosts = [...new Set(['localhost', '127.0.0.1', ...devDomains.map(host)])]
 
 const failures = []
 const check = (ok, msg) => ok || failures.push(msg)

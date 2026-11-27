@@ -64,11 +64,13 @@ describe('verify-release', () => {
     return stderr
   }
 
-  // release copies a prod build into a temp dir, with manifest changes.
-  const release = (edit: (manifest: Record<string, any>) => void) => {
+  // release copies a prod build into a temp dir, with manifest changes and
+  // optionally extra text in ui.html.
+  const release = (edit: (manifest: Record<string, any>) => void, uiExtra = '') => {
     execFileSync('node', ['scripts/build.mjs', '--mode', 'prod'], { stdio: 'pipe' })
     const dir = mkdtempSync(join(tmpdir(), 'ogen-release-'))
     cpSync('dist', join(dir, 'dist'), { recursive: true })
+    writeFileSync(join(dir, 'dist/ui.html'), readFileSync('dist/ui.html', 'utf8') + uiExtra)
     const manifest = JSON.parse(readFileSync('manifest.json', 'utf8'))
     manifest.id = '1234567890'
     edit(manifest)
@@ -102,6 +104,11 @@ describe('verify-release', () => {
       const dir = release((m) => m.networkAccess.allowedDomains.push(extra))
       expect(verify('--dir', dir)).toContain(`${extra} is not an approved production origin`)
     }
+  })
+
+  it("judges a release's bundle by this checkout's development origins", () => {
+    const dir = release((m) => (m.networkAccess.devAllowedDomains = []), '<!-- https://api.dev.getogen.com -->')
+    expect(verify('--dir', dir)).toContain('development origin api.dev.getogen.com')
   })
 
   it('rejects allowedDomains missing a production origin', () => {
