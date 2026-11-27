@@ -5,15 +5,20 @@ every update after that. The first listing is tracked in
 [CON-341](https://linear.app/ogen/issue/CON-341).
 
 > **One rule above all:** Figma publishes `manifest.json` and the `dist/`
-> files **exactly as they are on your disk** when you click Publish. Always
-> rebuild with `npm run build:prod` from a clean `main` right before
-> publishing. A dev build points at `http://localhost:9001` and would break
+> files **exactly as they are on your disk** when you click Publish. Publish
+> only the files the Release workflow built for the tag (step 2), never a
+> local build. A dev build points at `http://localhost:9001` and would break
 > the plugin for every user.
 
 ## How releases work
 
-- **There is no CI deploy.** A person publishes from the Figma desktop app,
-  using a Figma account that has publish rights on the plugin.
+- **CI builds, a person publishes.** Pushing a `v<version>` tag runs
+  [`.github/workflows/release.yml`](.github/workflows/release.yml): checks,
+  `npm run build:prod`, `npm run verify:release`, and a **draft** GitHub
+  release with `ogen-figma-plugin-v<version>.zip` (`manifest.json`,
+  `dist/code.js`, `dist/ui.html`) and `SHA256SUMS`. Figma has no publish
+  API, so the publish itself happens in the Figma desktop app, by an account
+  that has publish rights on the plugin.
 - **Only the first publish is reviewed.** Figma reviews a new plugin before
   listing it, and approval time depends on their queue. Once the plugin is
   approved, updates go live for every user as soon as you publish them, with
@@ -24,13 +29,15 @@ every update after that. The first listing is tracked in
   [Rolling back](#rolling-back)).
 - **Each build is tied to one API.** The Ogen API origin is compiled into the
   bundle (`__API_BASE__`) and must be listed in `manifest.json` →
-  `networkAccess.allowedDomains`, which Figma enforces. The Community listing
-  shows these domains under "Network access".
+  `networkAccess.allowedDomains`, which Figma enforces. Production allows
+  `https://api.getogen.com` and Ogen's storage, `https://assets.getogen.com`.
+  The Community listing shows these domains under "Network access".
 
 ## Versioning
 
 - `package.json` → `version` follows semver and is the release's identity in
-  git (`v<version>` tags) and in Figma's release notes.
+  git (`v<version>` tags) and in Figma's release notes. The Release workflow
+  refuses a tag that doesn't match it.
   - **patch:** fixes, copy changes
   - **minor:** new options or screens
   - **major:** a change that needs a newer Ogen API
@@ -52,28 +59,24 @@ every update after that. The first listing is tracked in
         -H 'Access-Control-Request-Headers: content-type' | grep -i access-control
       ```
       Expect `Access-Control-Allow-Origin: *`.
-- [ ] **Storage bucket allows the plugin.** The plugin uploads videos to
-      the production R2 bucket and downloads post media from it for
-      campaign boards, through presigned URLs, from origin `null`. The
-      bucket's CORS policy (Cloudflare → R2 → the bucket → Settings → CORS
-      policy) needs this rule **next to** the web app's rule, so keep that
-      one:
-      ```json
-      {
-        "AllowedOrigins": ["*"],
-        "AllowedMethods": ["PUT", "GET"],
-        "AllowedHeaders": ["content-type"],
-        "MaxAgeSeconds": 3600
-      }
-      ```
-      `*` is safe here: a presigned URL is already the credential, and no
-      cookies are involved. Without `GET`, board media fails with "No
-      'Access-Control-Allow-Origin' header" in the plugin console. Without
-      `PUT`, video sends fail with "Could not reach Ogen storage". Check it
-      (no signed URL needed):
+- [ ] **Storage is served from `assets.getogen.com`.** The plugin uploads
+      videos to Ogen's storage and downloads post media from it for campaign
+      boards, through short-lived signed URLs the API issues, from origin
+      `null`. Figma only lets it reach `https://assets.getogen.com`, so every
+      signed URL the production API hands the plugin (video presign, board
+      media) must be on that host: R2's own presigned URLs live on
+      `<account>.r2.cloudflarestorage.com`, which a published plugin can't
+      reach (CON-543). `assets.getogen.com` must answer CORS for the plugin:
+      `Access-Control-Allow-Origin: *`, methods `PUT, GET`, header
+      `content-type`. `*` is safe here: the signed URL is already the
+      credential, and no cookies are involved. Without `GET`, board media
+      fails with "No 'Access-Control-Allow-Origin' header" in the plugin
+      console. Without `PUT`, video sends fail with "Could not reach Ogen
+      storage". Check it (no signed URL needed):
       ```sh
-      curl -si -X OPTIONS 'https://<account>.r2.cloudflarestorage.com/<prod bucket>/cors-check' \
-        -H 'Origin: null' -H 'Access-Control-Request-Method: GET' | grep -i access-control
+      curl -si -X OPTIONS 'https://assets.getogen.com/cors-check' \
+        -H 'Origin: null' -H 'Access-Control-Request-Method: PUT' \
+        -H 'Access-Control-Request-Headers: content-type' | grep -i access-control
       ```
       Expect `Access-Control-Allow-Origin: *` and
       `Access-Control-Allow-Methods` listing `PUT, GET`.
@@ -82,7 +85,8 @@ every update after that. The first listing is tracked in
       `https://app.getogen.com/integrations/figma/connect?key=…`.
 - [ ] **API origin is confirmed.** If production is not
       `https://api.getogen.com`, update `allowedDomains` in `manifest.json`
-      and `DEFAULT_API.prod` in `scripts/build.mjs` together.
+      and `DEFAULT_API.prod` (and so `PROD_DOMAINS`) in
+      `scripts/origins.mjs` together.
 - [ ] **Spikes are recorded** in [docs/spikes.md](docs/spikes.md). In
       particular, the Dev Mode result decides `editorType` (and
       `capabilities: ["inspect"]`).
@@ -98,6 +102,7 @@ every update after that. The first listing is tracked in
       → New plugin…**, create a plugin, and copy the generated `id` into
       `manifest.json`, replacing the `ogen-send-to-ogen` placeholder. Commit
       that change. The id never changes after this, so never regenerate it.
+      `verify:release` (and so the Release workflow) fails until it is set.
 - [ ] **Listing assets are ready.** See [Community listing](#community-listing).
 
 ### Every release
@@ -109,39 +114,46 @@ every update after that. The first listing is tracked in
 
 ## Release steps
 
-### 1. Build from a clean checkout
+### 1. Tag the release
 
 ```sh
 git checkout main && git pull --ff-only
 git status --porcelain            # must print nothing
-npm ci
-npm run check                     # typecheck + unit tests
-npm run build:prod
+git tag -a v$(node -p "require('./package.json').version") -m "Figma Community release"
+git push origin v$(node -p "require('./package.json').version")
 ```
 
-### 2. Verify the bundle
+The **Release** workflow (GitHub → Actions) runs the checks, builds for
+production, verifies the bundle and creates a draft release. If it fails, fix
+it on `main`, delete the tag (`git push origin :refs/tags/v<version>` and
+`git tag -d v<version>`), and tag again.
 
-```sh
-# Production API is baked in, and nothing points at localhost
-grep -c 'https://api.getogen.com' dist/ui.html      # ≥ 1
-grep -c 'localhost' dist/ui.html dist/code.js       # 0 and 0
+### 2. Get the release build
 
-# The dev-only console readout is stripped
-grep -c '\[ogen\] editorType' dist/code.js          # 0
+1. Download `ogen-figma-plugin-v<version>.zip` and `SHA256SUMS` from the
+   draft release.
+2. Unzip it **over a clean checkout of the tag**, so `manifest.json` and
+   `dist/` sit where the development plugin already points:
+   ```sh
+   git checkout v<version>
+   unzip -o ~/Downloads/ogen-figma-plugin-v<version>.zip
+   shasum -a 256 -c ~/Downloads/SHA256SUMS --ignore-missing   # all OK
+   npm run verify:release -- --tag v<version>                  # [verify] ok
+   ```
 
-# The manifest has the real id and the production domain
-node -e "const m=require('./manifest.json'); console.log(m.id, m.networkAccess.allowedDomains)"
-```
-
-`devAllowedDomains` (localhost and `https://api.dev.getogen.com`) stays in
-the manifest. Figma ignores it for published plugins.
+`verify:release` checks that the manifest has the real plugin id and exactly
+the production domains (`PROD_DOMAINS` in `scripts/origins.mjs`), that the bundle calls `https://api.getogen.com` and
+mentions no development origin, and that the dev-only console readout is
+stripped. `devAllowedDomains` (localhost, `https://api.dev.getogen.com` and
+the R2 API host the dev environment still signs on) stays in the manifest.
+Figma ignores it for published plugins.
 
 ### 3. Smoke-test the production build
 
 1. In Figma desktop, go to **Plugins → Development → Import plugin from
-   manifest…**, pick `manifest.json`, then run **Plugins → Development →
-   Ogen**. If the plugin was imported before, running it again loads the new
-   `dist/`.
+   manifest…**, pick the checkout's `manifest.json` (from step 2), then run
+   **Plugins → Development → Ogen**. If the plugin was imported before,
+   running it again loads the new `dist/`.
 2. Use a **test workspace** in production. Don't use a customer workspace.
 3. Walk through this checklist:
    - [ ] **Connect:** the browser opens the production approval page, you
@@ -161,10 +173,10 @@ the manifest. Figma ignores it for published plugins.
    - [ ] **Too large:** a frame over 100 MP at the chosen scale is flagged
          and skipped.
    - [ ] **Video:** send an animated frame as MP4 to a post that takes
-         video. It's attached, which also proves the bucket allows `PUT`.
+         video. It's attached, which also proves storage allows `PUT`.
    - [ ] **Board media:** create a board for a campaign whose posts have
          images. They appear in the placeholders with "Image from Ogen",
-         which also proves the bucket allows `GET`.
+         which also proves storage allows `GET`.
    - [ ] **Disconnect:** the menu → Disconnect returns to Connect, and the
          connection disappears from Ogen settings.
    - [ ] **Revoke from Ogen:** reconnect, revoke the connection in Ogen
@@ -179,6 +191,8 @@ the manifest. Figma ignores it for published plugins.
 
 **First release:**
 
+Publish from the checkout of step 2, the same files you smoke-tested.
+
 1. In Figma desktop, open any file, then go to Figma menu → **Plugins →
    Manage plugins**.
 2. Select **Ogen** and click **Publish**.
@@ -192,26 +206,23 @@ the manifest. Figma ignores it for published plugins.
 5. Submit. The listing shows **In review** until Figma approves it.
    Approval time varies with their queue. You can still publish fixes while
    the plugin is in review. If Figma rejects it, fix the feedback and
-   resubmit.
+   resubmit. A fix is a new version and tag (steps 1–3), never a local
+   build.
 
 **Updates:**
 
 1. Go to Figma menu → **Plugins → Manage plugins**, open the menu next to
    **Ogen**, and choose **Publish new version**.
 2. Write the **Release notes**, starting with the version
-   (`v0.2.0 — …`), and end-user facing.
+   (`v0.2.0 — …`), and end-user facing. The draft GitHub release lists the
+   merged PRs to start from.
 3. Click **Publish**. The update reaches every user immediately.
 
 ### 5. After publishing
 
-```sh
-git tag -a v$(node -p "require('./package.json').version") -m "Figma Community release"
-git push origin --tags
-```
-
-- Create a GitHub release from the tag, using the same notes. Attach
-  `dist/code.js`, `dist/ui.html` and `manifest.json` from this build, so the
-  exact published files can be republished later.
+- Put the Figma release notes into the draft GitHub release and **publish
+  it**. Its zip holds the exact published files, for a rollback later.
+- `git checkout main` in the checkout you published from.
 - Install the plugin from its Community page (not the development copy) and
   run it once. Check that Connect works and one frame sends.
 - Update the Linear issue: add the Community URL
@@ -227,10 +238,20 @@ git push origin --tags
 Users can't pin an old version, so a rollback is a new publish of a known
 good build:
 
-1. Download `code.js`, `ui.html` and `manifest.json` from the last good
-   GitHub release into `dist/` and the repo root. Alternatively, check out
-   its tag and run `npm ci && npm run build:prod`.
-2. Run step 2 (verify the bundle) and a short smoke test.
+1. Check the last good GitHub release against **today's** rules: on an
+   up-to-date `main`, unzip its `ogen-figma-plugin-v<version>.zip` into a
+   scratch folder and run the current verifier on it. A checked-out old tag
+   would run that tag's verifier, which knows nothing of later domain
+   changes.
+   ```sh
+   git checkout main && git pull --ff-only
+   unzip -o ~/Downloads/ogen-figma-plugin-v<version>.zip -d /tmp/ogen-rollback
+   node scripts/verify-release.mjs --dir /tmp/ogen-rollback    # [verify] ok
+   ```
+   If it fails (for example, the release predates the real plugin id or a
+   domain change), don't roll back to it.
+2. Do step 2 with that release: check out its tag and unzip the same zip over
+   it. Don't rebuild: the zip is what users ran. Run a short smoke test.
 3. Publish it with **Publish new version**, with release notes such as
    `v0.2.1 — reverts v0.2.0 (…)`.
 4. Fix forward on `main`, then release as usual.
@@ -268,7 +289,7 @@ Keep the copy and artwork in version control, for example under
 | Thumbnail | 1920 × 1080 px |
 | Carousel | Up to 9 images or videos: Connect, Send screen, campaign tree, Result |
 | Support contact | A shared support address or URL, not a personal one |
-| Network access | Shown automatically from `allowedDomains` (`api.getogen.com`, `*.r2.cloudflarestorage.com`) |
+| Network access | Shown automatically from `allowedDomains` (`api.getogen.com`, `assets.getogen.com`) |
 | Contributors | Ogen maintainers who may publish updates |
 | Playground file | Optional: a sample file with a few frames to try |
 
@@ -280,9 +301,8 @@ Facts for the security disclosure form:
   and node id, and the Figma file name. Nothing else from the document is
   read or sent.
 - **Where it goes:** only Ogen: the Ogen API (`api.getogen.com`) and Ogen's
-  storage (`*.r2.cloudflarestorage.com`), which videos are uploaded to and
-  board media is downloaded from, through short-lived presigned URLs the
-  API issues. The plugin has no third-party services and no analytics.
+  storage (`assets.getogen.com`), which videos are uploaded to and board
+  media is downloaded from, through short-lived signed URLs the API issues. The plugin has no third-party services and no analytics.
 - **Authentication:** a one-time pairing in the browser gives the plugin a
   revocable token, scoped to one Ogen workspace. The token can only upload
   images and list campaign and post titles (never post text).
@@ -301,6 +321,10 @@ Facts for the security disclosure form:
   `devAllowedDomains`. Import it as a development plugin. A production build
   refuses this origin, and published plugins ignore `devAllowedDomains`, so
   a dev-environment build can't reach users even by mistake.
+- **Dev storage:** the dev environment still signs storage URLs on
+  `<account>.r2.cloudflarestorage.com`, so `https://*.r2.cloudflarestorage.com`
+  is in `devAllowedDomains` for development builds only. Drop it once dev
+  moves to its own assets host too (CON-543).
 - **Other environments:** add the origin to `devAllowedDomains`, never to
   `allowedDomains`, which is for production only.
 - **Sharing a test build:** a development plugin only runs for the person

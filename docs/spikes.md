@@ -54,6 +54,7 @@ CON-347.
    Reels, TikTok and YouTube Shorts rules without transcoding?
 6. **Storage**: does the PUT to the presigned R2 URL work from the plugin
    iframe (origin `null`) with the bucket's CORS rules, and does Figma accept
-   `https://*.r2.cloudflarestorage.com` in `allowedDomains`?
+   `https://*.r2.cloudflarestorage.com` in `devAllowedDomains`? (Production
+   allows only `https://assets.getogen.com`, CON-543.)
 
 Result: _not yet run_

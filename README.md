@@ -75,12 +75,18 @@ use `allowedDomains` or `devAllowedDomains`; production builds only
 | -- | -- | -- |
 | `npm run build:dev` | `http://localhost:9001` | unminified, prints the spike readout |
 | `npm run build:dev:remote` | `https://api.dev.getogen.com` | as `build:dev`, against the dev environment |
-| `npm run build:prod` | `https://api.getogen.com` | minified; what gets published |
+| `npm run build:prod` | `https://api.getogen.com` | minified; what gets published (CI builds it on a `v*` tag) |
+
+`npm run verify:release` checks that `dist/` and `manifest.json` are a
+publishable production build (real plugin id, production domains only, no
+development origin or dev readout in the bundle).
 
 There is one `manifest.json` for both builds. `allowedDomains` holds the
-production API, and `devAllowedDomains` holds localhost and the dev
-environment (`https://api.dev.getogen.com`), which Figma only honours for
-plugins under development. The API origin is compiled into the
+production API and Ogen's storage (`https://assets.getogen.com`), and
+`devAllowedDomains` holds localhost, the dev environment
+(`https://api.dev.getogen.com`) and the R2 API host the dev environment signs
+storage URLs on (`https://*.r2.cloudflarestorage.com`), which Figma only
+honours for plugins under development. The API origin is compiled into the
 bundle (`__API_BASE__`), so the two builds differ only in `dist/`.
 
 `dist/code.js` is the main-thread bundle. `dist/ui.html` is the UI with its
@@ -92,7 +98,9 @@ JS and CSS inlined, because Figma loads the UI as a single HTML string.
 npm run check      # typecheck (UI, main, tests) + unit tests
 ```
 
-CI runs the same checks and a production build on every PR.
+CI runs the same checks and a production build on every PR. A `v*` tag runs
+the Release workflow, which also verifies the build and attaches it to a draft
+GitHub release.
 
 ## How it works
 
@@ -257,8 +265,8 @@ a plain run on a board page opens Boards.
   as the frame's image fill, one at a time, with progress. Sync does the
   same for new posts and for placeholders nobody has touched. A frame that
   still holds only its image from Ogen isn't sent again: that image is
-  already on the post. The storage bucket's CORS rules must allow `GET`
-  from the plugin's `null` origin.
+  already on the post. Storage (`assets.getogen.com` in production) must
+  allow `GET` from the plugin's `null` origin.
 - **Stored state** (`src/shared/board.ts`): each frame carries its post in
   plugin data (`ogen`), which duplicating copies: a duplicated slide joins
   its carousel. The page carries the board meta and grid (`ogen.board`). A
@@ -302,25 +310,29 @@ src/ui/        Preact UI: screens (Connect, Send, Boards, Sending, Result), comp
 src/api/       Ogen plugin API client, pairing, posts, image upload
 src/queue/     send queue, pre-flight checks, error messages, summary
 src/shared/    main ⇄ UI message protocol, campaign board model
-scripts/       build (esbuild, inlines the UI into dist/ui.html)
+scripts/       build (esbuild, inlines the UI into dist/ui.html), release verification
 docs/          day-one spikes
 test/          vitest unit tests
 ```
 
 ## Release
 
-See [RELEASE.md](RELEASE.md) for the full process: prerequisites, the clean
-production build and its checks, the smoke test, publishing in Figma, tagging
-and rollback. In short, publish only a fresh `npm run build:prod` from a
-clean `main`, because Figma uploads `manifest.json` and `dist/` exactly as
-they are on disk.
+See [RELEASE.md](RELEASE.md) for the full process: prerequisites, tagging, the
+CI-built release zip and its checks, the smoke test, publishing in Figma and
+rollback. In short, push a `v<version>` tag and publish only the files the
+Release workflow attached to its draft GitHub release, because Figma uploads
+`manifest.json` and `dist/` exactly as they are on disk.
 
 ## Open items
 
 - The manifest `id` is a placeholder until the plugin is created in Figma
   (see [RELEASE.md](RELEASE.md) prerequisites).
 - The production API origin is assumed to be `https://api.getogen.com`. Update
-  `manifest.json` and `scripts/build.mjs` if it differs.
+  `manifest.json` and `scripts/origins.mjs` if it differs.
+- Production storage URLs must be on `https://assets.getogen.com`, the only
+  storage origin a published plugin may reach. The API still signs them on
+  R2's S3 host, so video sends and board media won't work in production
+  until [CON-543](https://linear.app/ogen/issue/CON-543) lands.
 - `GET /me` doesn't return a pixel cap yet, so the plugin assumes
   image-service's default of 100 MP. If the API adds
   `limits.max_image_pixels`, the plugin already reads it.

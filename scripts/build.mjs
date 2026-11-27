@@ -12,11 +12,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { parseArgs } from 'node:util'
 import * as esbuild from 'esbuild'
-
-const DEFAULT_API = {
-  dev: 'http://localhost:9001',
-  prod: 'https://api.getogen.com',
-}
+import { DEFAULT_API } from './origins.mjs'
 
 const { values: args } = parseArgs({
   options: {

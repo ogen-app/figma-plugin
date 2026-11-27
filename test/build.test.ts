@@ -1,5 +1,7 @@
-import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('build', () => {
@@ -43,9 +45,79 @@ describe('build', () => {
     ).toThrow(/not in manifest\.json networkAccess/)
   })
 
-  it('lets video uploads reach R2 storage, with a reason for reviewers', () => {
+  it('lets video uploads reach Ogen storage, with a reason for reviewers', () => {
     const manifest = JSON.parse(readFileSync('manifest.json', 'utf8'))
-    expect(manifest.networkAccess.allowedDomains).toContain('https://*.r2.cloudflarestorage.com')
+    expect(manifest.networkAccess.allowedDomains).toEqual(['https://api.getogen.com', 'https://assets.getogen.com'])
+    expect(manifest.networkAccess.devAllowedDomains).toContain('https://*.r2.cloudflarestorage.com')
     expect(manifest.networkAccess.reasoning).toMatch(/video/)
+  })
+})
+
+describe('verify-release', () => {
+  // verify runs the verifier and returns its stderr, failing the test on
+  // anything but a clean pass or the verifier's own report.
+  const verify = (...args: string[]) => {
+    const { status, stderr } = spawnSync('node', ['scripts/verify-release.mjs', ...args], { encoding: 'utf8' })
+    if (status === 0) return ''
+    expect(status).toBe(1)
+    expect(stderr).toMatch(/^\[verify\] not a publishable production build:\n/)
+    return stderr
+  }
+
+  // release copies a prod build into a temp dir, with manifest changes and
+  // optionally extra text in ui.html.
+  const release = (edit: (manifest: Record<string, any>) => void, uiExtra = '') => {
+    execFileSync('node', ['scripts/build.mjs', '--mode', 'prod'], { stdio: 'pipe' })
+    const dir = mkdtempSync(join(tmpdir(), 'ogen-release-'))
+    cpSync('dist', join(dir, 'dist'), { recursive: true })
+    writeFileSync(join(dir, 'dist/ui.html'), readFileSync('dist/ui.html', 'utf8') + uiExtra)
+    const manifest = JSON.parse(readFileSync('manifest.json', 'utf8'))
+    manifest.id = '1234567890'
+    edit(manifest)
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest))
+    return dir
+  }
+
+  it('rejects a dev build', () => {
+    execFileSync('node', ['scripts/build.mjs', '--mode', 'dev'], { stdio: 'pipe' })
+    const out = verify()
+    expect(out).toContain('does not call the production API')
+    expect(out).toContain('development origin localhost')
+    expect(out).toContain('spike readout')
+  })
+
+  it('passes a prod build, short of the real plugin id until it is set', () => {
+    execFileSync('node', ['scripts/build.mjs', '--mode', 'prod'], { stdio: 'pipe' })
+    const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
+    const out = verify('--tag', `v${version}`)
+    if (out !== '') {
+      expect(out.trim().split('\n').slice(1)).toEqual([expect.stringContaining('is not a real Figma plugin id')])
+    }
+  })
+
+  it('passes a prod build with a real plugin id', () => {
+    expect(verify('--dir', release(() => {}))).toBe('')
+  })
+
+  it('rejects any allowedDomains entry beyond the production origins', () => {
+    for (const extra of ['https://staging.getogen.com', 'https://*.getogen.com', 'https://*.r2.cloudflarestorage.com']) {
+      const dir = release((m) => m.networkAccess.allowedDomains.push(extra))
+      expect(verify('--dir', dir)).toContain(`${extra} is not an approved production origin`)
+    }
+  })
+
+  it("judges a release's bundle by this checkout's development origins", () => {
+    const dir = release((m) => (m.networkAccess.devAllowedDomains = []), '<!-- https://api.dev.getogen.com -->')
+    expect(verify('--dir', dir)).toContain('development origin api.dev.getogen.com')
+  })
+
+  it('rejects allowedDomains missing a production origin', () => {
+    const dir = release((m) => (m.networkAccess.allowedDomains = ['https://api.getogen.com']))
+    expect(verify('--dir', dir)).toContain('allowedDomains is missing https://assets.getogen.com')
+  })
+
+  it('rejects a tag that is not the package version', () => {
+    execFileSync('node', ['scripts/build.mjs', '--mode', 'prod'], { stdio: 'pipe' })
+    expect(verify('--tag', 'v0.0.0-nope')).toContain('does not match package.json version')
   })
 })
